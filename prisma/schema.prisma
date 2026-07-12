@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      OrgMember[]
+  models       Model[]
+  registries   Registry[]
+  apiKeys      ApiKey[]
+  auditLogs    AuditLog[]
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  passwordHash        String    @default("demo_hash")
+  name                String
+  avatarUrl           String?
+  mfaEnabled          Boolean   @default(false)
+  mfaSecret           String?
+  lastLoginAt         DateTime?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organizations     OrgMember[]
+  uploadedModels    Model[]
+  signatures        Signature[]
+  sandboxJobs       SandboxJob[]
+  auditLogs         AuditLog[]
+}
+
+model OrgMember {
+  id               String    @id @default(cuid())
+  orgId            String
+  userId           String
+  role             String    @default("viewer")
+  customPermissions String?
+  invitedBy        String
+  acceptedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  org   Organization @relation(fields: [orgId], references: [id])
+  user  User         @relation(fields: [userId], references: [id])
+
+  @@unique([orgId, userId])
+}
+
+model Model {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  description     String?
+  sourceUrl       String?
+  format          String
+  latestVersionId String?
+  status          String    @default("uploading")
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  org       Organization      @relation(fields: [orgId], references: [id])
+  createdBy  User             @relation(fields: [createdById], references: [id])
+  versions  ModelVersion[]
+  signatures Signature[]
+  sboms      Sbom[]
+  sandboxJobs SandboxJob[]
+
+  registryArtifacts RegistryArtifact[]
+}
+
+model ModelVersion {
+  id            String   @id @default(cuid())
+  modelId       String
+  version       String
+  storagePath   String   @default("")
+  fileSizeBytes Int      @default(0)
+  sha256Hash    String   @default("")
+  sha512Hash    String   @default("")
+  merkleRoot    String   @default("")
+  signatureId   String?  @unique
+  sbomId        String?  @unique
+  scanStatus    String   @default("pending")
+  scanResultJson String?
+  uploadedAt    DateTime @default(now())
+
+  model Model @relation(fields: [modelId], references: [id])
+}
+
+model Signature {
+  id             String   @id @default(cuid())
+  modelId        String
+  versionId      String   @unique
+  signerId       String
+  signerEmail    String
+  signerIdentity String
+  signatureValue String
+  certificatePem String?
+  verifiedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  model  Model        @relation(fields: [modelId], references: [id])
+  signer User         @relation(fields: [signerId], references: [id])
+}
+
+model Sbom {
+  id             String   @id @default(cuid())
+  modelId        String
+  versionId      String   @unique
+  format         String   @default("cyclonedx-ml-bom")
+  contentJson    String
+  totalDeps      Int      @default(0)
+  criticalCount  Int      @default(0)
+  highCount      Int      @default(0)
+  mediumCount    Int      @default(0)
+  lowCount       Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  model Model @relation(fields: [modelId], references: [id])
+}
+
+model SandboxJob {
+  id          String    @id @default(cuid())
+  modelId     String
+  versionId   String
+  status      String    @default("queued")
+  vmId        String?
+  configJson  String
+  resultJson  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  durationMs  Int?
+  submittedBy String
+  createdAt   DateTime  @default(now())
+
+  model           Model @relation(fields: [modelId], references: [id])
+  submittedByUser User  @relation(fields: [submittedBy], references: [id])
+}
+
+model Registry {
+  id            String    @id @default(cuid())
+  orgId         String
+  name          String
+  description   String?
+  policyRego    String
+  artifactCount Int       @default(0)
+  lastPublishAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  org       Organization       @relation(fields: [orgId], references: [id])
+  artifacts  RegistryArtifact[]
+}
+
+model RegistryArtifact {
+  id           String   @id @default(cuid())
+  registryId   String
+  modelId      String
+  versionId    String
+  publishedBy  String
+  publishedAt  DateTime @default(now())
+  gateResult   String   @default("ALLOWED")
+  gateReasons  String?
+
+  registry Registry @relation(fields: [registryId], references: [id])
+  model    Model    @relation(fields: [modelId], references: [id])
+
+  @@unique([registryId, modelId, versionId])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  orgId       String
+  name        String
+  keyHash     String
+  keyPrefix   String
+  permissions String?
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  org Organization @relation(fields: [orgId], references: [id])
+}
+
+model AuditLog {
+  id           Int      @id @default(autoincrement())
+  timestamp    DateTime @default(now())
+  orgId        String
+  userId       String?
+  actor        String
+  action       String
+  resourceType String
+  resourceId   String?
+  outcome      String
+  sourceIp     String?
+  metadata     String?
+
+  org  Organization @relation(fields: [orgId], references: [id])
+  user User?        @relation(fields: [userId], references: [id])
+}

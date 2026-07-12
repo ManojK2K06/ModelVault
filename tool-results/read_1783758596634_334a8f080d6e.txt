@@ -1,0 +1,1604 @@
+     1→'use client';
+     2→
+     3→import { useAppStore, type InfoSlug } from '@/lib/store';
+     4→import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Separator } from '@/components/ui/separator';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Textarea } from '@/components/ui/textarea';
+    10→import { Label } from '@/components/ui/label';
+    11→import {
+    12→  ArrowLeft,
+    13→  Shield,
+    14→  FileSearch,
+    15→  Box,
+    16→  Globe,
+    17→  CheckCircle2,
+    18→  Clock,
+    19→  Users,
+    20→  Building2,
+    21→  Mail,
+    22→  Phone,
+    23→  MapPin,
+    24→  Download,
+    25→  Lock,
+    26→  Eye,
+    27→  Bug,
+    28→  Scale,
+    29→  FileText,
+    30→  BookOpen,
+    31→  Activity,
+    32→  DollarSign,
+    33→  Zap,
+    34→  ChevronRight,
+    35→  Star,
+    36→  Heart,
+    37→  Target,
+    38→  Award,
+    39→  ExternalLink,
+    40→  CircleDot,
+    41→  Code,
+    42→  Server,
+    43→  Database,
+    44→  ScanLine,
+    45→  Container,
+    46→  LayoutDashboard,
+    47→  AlertTriangle,
+    48→  ShieldCheck,
+    49→} from 'lucide-react';
+    50→
+    51→/* ─────────────────────────── shared pieces ─────────────────────────── */
+    52→
+    53→const PAGE_TITLES: Record<InfoSlug, string> = {
+    54→  features: 'Features',
+    55→  pricing: 'Pricing',
+    56→  documentation: 'Documentation',
+    57→  status: 'System Status',
+    58→  about: 'About ModelVault',
+    59→  blog: 'Blog',
+    60→  careers: 'Careers',
+    61→  contact: 'Contact Us',
+    62→  whitepaper: 'Security Whitepaper',
+    63→  compliance: 'Compliance',
+    64→  'bug-bounty': 'Bug Bounty Program',
+    65→  privacy: 'Privacy',
+    66→  terms: 'Terms of Service',
+    67→  'privacy-policy': 'Privacy Policy',
+    68→  'security-policy': 'Security Policy',
+    69→};
+    70→
+    71→const PAGE_DESCRIPTIONS: Record<InfoSlug, string> = {
+    72→  features: 'End-to-end security and integrity for every AI model in your pipeline.',
+    73→  pricing: 'Transparent plans that scale with your organization\'s needs.',
+    74→  documentation: 'Everything you need to integrate, configure, and operate ModelVault.',
+    75→  status: 'Real-time availability and health of all ModelVault services.',
+    76→  about: 'The team and mission behind ModelVault.',
+    77→  blog: 'Insights, research, and updates from the ModelVault team.',
+    78→  careers: 'Join us in securing the future of AI.',
+    79→  contact: 'Get in touch with our team.',
+    80→  whitepaper: 'Our comprehensive security research and methodology.',
+    81→  compliance: 'Enterprise-grade compliance you can trust.',
+    82→  'bug-bounty': 'Help us keep ModelVault secure — and earn rewards.',
+    83→  privacy: 'How we handle and protect your data.',
+    84→  terms: 'The terms governing your use of ModelVault.',
+    85→  'privacy-policy': 'Detailed privacy practices and data handling.',
+    86→  'security-policy': 'Our approach to security and vulnerability disclosure.',
+    87→};
+    88→
+    89→function BackLink() {
+    90→  const { navigate } = useAppStore();
+    91→  return (
+    92→    <button
+    93→      onClick={() => navigate('landing')}
+    94→      className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-[#667eea] transition-colors mb-8"
+    95→    >
+    96→      <ArrowLeft className="h-4 w-4" />
+    97→      Back to home
+    98→    </button>
+    99→  );
+   100→}
+   101→
+   102→function PageShell({ slug, children }: { slug: InfoSlug; children: React.ReactNode }) {
+   103→  return (
+   104→    <div className="min-h-screen bg-[#0A0E1A] text-gray-200">
+   105→      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12 pb-24">
+   106→        <BackLink />
+   107→        <header className="mb-10">
+   108→          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+   109→            {PAGE_TITLES[slug]}
+   110→          </h1>
+   111→          <p className="mt-2 text-lg text-gray-400">{PAGE_DESCRIPTIONS[slug]}</p>
+   112→        </header>
+   113→        {children}
+   114→      </div>
+   115→    </div>
+   116→  );
+   117→}
+   118→
+   119→/* ─────────────────────────── FEATURES ─────────────────────────── */
+   120→
+   121→function FeaturesPage() {
+   122→  const pillars = [
+   123→    {
+   124→      icon: <Shield className="h-8 w-8 text-[#667eea]" />,
+   125→      title: 'Cryptographic Signing',
+   126→      description:
+   127→        'Every model artifact uploaded to ModelVault is cryptographically signed using Sigstore-compatible X.509 certificates. This establishes a tamper-evident chain of trust from the moment a model is published through to deployment. Signatures are verified automatically on every pull, ensuring that the artifact you deploy is exactly the one your team approved. Private keys never leave your CI/CD environment, and all certificates are short-lived and automatically rotated.',
+   128→      details: [
+   129→        'Sigstore-compatible signing (cosign, notation)',
+   130→        'X.509 certificate-based identity',
+   131→        'Automatic key rotation with 24-hour expiry',
+   132→        'Verification integrated into CI/CD pipelines',
+   133→        'Support for Sigstore Fulcio and custom CAs',
+   134→      ],
+   135→    },
+   136→    {
+   137→      icon: <FileSearch className="h-8 w-8 text-[#667eea]" />,
+   138→      title: 'SBOM Generation & Scanning',
+   139→      description:
+   140→        'ModelVault automatically generates Software Bill of Materials (SBOMs) in both SPDX and CycloneDX formats for every uploaded model. These SBOMs capture the full dependency graph — framework versions, transitive library dependencies, dataset provenance, and training environment specifications. Our integrated vulnerability scanner cross-references every component against the NVD, OSV, and our own AI-specific vulnerability database, flagging known issues before your model ever reaches production.',
+   141→      details: [
+   142→        'SPDX 2.3 and CycloneDX 1.5 output formats',
+   143→        'Automated dependency graph extraction',
+   144→        'NVD and OSV vulnerability correlation',
+   145→        'AI-specific vulnerability database (10,000+ entries)',
+   146→        'Continuous re-scanning on dependency updates',
+   147→      ],
+   148→    },
+   149→    {
+   150→      icon: <Box className="h-8 w-8 text-[#667eea]" />,
+   151→      title: 'Sandbox Analysis',
+   152→      description:
+   153→        'Before any model is approved for deployment, ModelVault can execute it inside an isolated, hardware-enforced sandbox environment. The sandbox observes the model\'s runtime behavior — including file system access, network calls, memory allocation patterns, and system API invocations — and compares them against a baseline of expected behavior. Anomalous activity is flagged in real time, giving your security team actionable intelligence about potential supply-chain attacks embedded in model weights or inference logic.',
+   154→      details: [
+   155→        'gVisor-based hardware-isolated containers',
+   156→        'File system, network, and syscall monitoring',
+   157→        'Behavioral anomaly detection with ML',
+   158→        'Support for PyTorch, TensorFlow, ONNX, and GGUF',
+   159→        'Automated report generation with severity scoring',
+   160→      ],
+   161→    },
+   162→    {
+   163→      icon: <Globe className="h-8 w-8 text-[#667eea]" />,
+   164→      title: 'Secure Model Registry',
+   165→      description:
+   166→        'ModelVault provides a private, access-controlled model registry that serves as your organization\'s single source of truth for approved AI artifacts. Role-based access control (RBAC), audit logging, and immutable version history ensure that only authorized personnel can publish or promote models. The registry supports geographically distributed replication, content-addressable storage, and webhook integrations with popular MLOps platforms like MLflow, ClearML, and Weights & Biases.',
+   167→      details: [
+   168→        'Role-based access control (RBAC) with OIDC/SAML',
+   169→        'Immutable version history with rollback',
+   170→        'Content-addressable storage (SHA-256 deduplication)',
+   171→        'Geo-replicated across 12 global regions',
+   172→        'Webhooks for MLflow, ClearML, W&B, and more',
+   173→      ],
+   174→    },
+   175→  ];
+   176→
+   177→  return (
+   178→    <PageShell slug="features">
+   179→      <div className="space-y-4 mb-10">
+   180→        <p className="text-gray-300 leading-relaxed">
+   181→          ModelVault provides a comprehensive security platform purpose-built for the unique challenges of AI model
+   182→          lifecycle management. From the moment a model artifact is created in a researcher&apos;s notebook to its
+   183→          deployment in a production inference endpoint, every step is protected, auditable, and verifiable. Our
+   184→          platform integrates seamlessly into existing MLOps workflows while adding a critical security layer that
+   185→          traditional software supply-chain tools were never designed to handle.
+   186→        </p>
+   187→        <p className="text-gray-300 leading-relaxed">
+   188→          The AI model supply chain is fundamentally different from traditional software. Model artifacts — weights,
+   189→          tokenizers, configuration files, and evaluation data — can be gigabytes in size, are opaque by nature, and
+   190→          often embed malicious behavior that is invisible to standard static analysis. ModelVault addresses these
+   191→          challenges with a layered approach combining cryptographic verification, deep dependency analysis, runtime
+   192→          behavioral monitoring, and enterprise-grade access controls.
+   193→        </p>
+   194→      </div>
+   195→      <div className="grid gap-6 sm:grid-cols-2">
+   196→        {pillars.map((p) => (
+   197→          <Card key={p.title} className="bg-[#111827] border-gray-800">
+   198→            <CardHeader>
+   199→              <div className="flex items-center gap-3">
+   200→                {p.icon}
+   201→                <CardTitle className="text-white text-lg">{p.title}</CardTitle>
+   202→              </div>
+   203→            </CardHeader>
+   204→            <CardContent className="space-y-4">
+   205→              <p className="text-sm text-gray-300 leading-relaxed">{p.description}</p>
+   206→              <ul className="space-y-1.5">
+   207→                {p.details.map((d) => (
+   208→                  <li key={d} className="flex items-start gap-2 text-sm text-gray-400">
+   209→                    <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+   210→                    {d}
+   211→                  </li>
+   212→                ))}
+   213→              </ul>
+   214→            </CardContent>
+   215→          </Card>
+   216→        ))}
+   217→      </div>
+   218→    </PageShell>
+   219→  );
+   220→}
+   221→
+   222→/* ─────────────────────────── PRICING ─────────────────────────── */
+   223→
+   224→function PricingPage() {
+   225→  const plans = [
+   226→    {
+   227→      name: 'Free',
+   228→      price: '$0',
+   229→      period: 'forever',
+   230→      description: 'For individual researchers and small teams getting started with model security.',
+   231→      features: [
+   232→        'Up to 5 model artifacts',
+   233→        'Basic SBOM generation (SPDX)',
+   234→        'Community support',
+   235→        '1 registry with 1 GB storage',
+   236→        'Manual signing only',
+   237→        'Public vulnerability database access',
+   238→      ],
+   239→      cta: 'Get Started Free',
+   240→      highlighted: false,
+   241→    },
+   242→    {
+   243→      name: 'Pro',
+   244→      price: '$49',
+   245→      period: '/mo per user',
+   246→      description: 'For teams that need comprehensive model security and compliance capabilities.',
+   247→      features: [
+   248→        'Unlimited model artifacts',
+   249→        'SBOM in SPDX + CycloneDX',
+   250→        'Sandbox analysis (50 scans/mo)',
+   251→        '10 registries with 100 GB storage',
+   252→        'Automated CI/CD signing',
+   253→        'Priority email support',
+   254→        'Role-based access control',
+   255→        'Audit logging (90-day retention)',
+   256→        'Webhook integrations',
+   257→        'Custom vulnerability policies',
+   258→      ],
+   259→      cta: 'Start Pro Trial',
+   260→      highlighted: true,
+   261→    },
+   262→    {
+   263→      name: 'Enterprise',
+   264→      price: 'Custom',
+   265→      period: 'tailored pricing',
+   266→      description: 'For organizations with advanced security, compliance, and scale requirements.',
+   267→      features: [
+   268→        'Everything in Pro, plus:',
+   269→        'Unlimited sandbox scans',
+   270→        'Unlimited registries and storage',
+   271→        'SAML SSO & SCIM provisioning',
+   272→        'FedRAMP & SOC 2 compliance reports',
+   273→        'Dedicated account manager',
+   274→        '24/7 phone and Slack support',
+   275→        'On-premises / VPC deployment option',
+   276→        'Custom SLA (99.99% uptime)',
+   277→        'Audit logging (unlimited retention)',
+   278→        'Advanced behavioral detection',
+   279→        'Private vulnerability feed',
+   280→        'White-glove onboarding',
+   281→      ],
+   282→      cta: 'Contact Sales',
+   283→      highlighted: false,
+   284→    },
+   285→  ];
+   286→
+   287→  const comparisons = [
+   288→    { feature: 'Model artifacts', free: '5', pro: 'Unlimited', enterprise: 'Unlimited' },
+   289→    { feature: 'SBOM formats', free: 'SPDX', pro: 'SPDX + CycloneDX', enterprise: 'SPDX + CycloneDX + custom' },
+   290→    { feature: 'Sandbox scans/mo', free: '—', pro: '50', enterprise: 'Unlimited' },
+   291→    { feature: 'Storage', free: '1 GB', pro: '100 GB', enterprise: 'Unlimited' },
+   292→    { feature: 'Registries', free: '1', pro: '10', enterprise: 'Unlimited' },
+   293→    { feature: 'SSO / SAML', free: '—', pro: '—', enterprise: '✓' },
+   294→    { feature: 'Audit log retention', free: '7 days', pro: '90 days', enterprise: 'Unlimited' },
+   295→    { feature: 'Support', free: 'Community', pro: 'Priority email', enterprise: '24/7 + Slack' },
+   296→    { feature: 'SLA', free: '99.5%', pro: '99.9%', enterprise: '99.99%' },
+   297→    { feature: 'On-premises deploy', free: '—', pro: '—', enterprise: '✓' },
+   298→  ];
+   299→
+   300→  return (
+   301→    <PageShell slug="pricing">
+   302→      <p className="text-gray-300 leading-relaxed mb-10">
+   303→        Choose the plan that fits your team&apos;s needs. All plans include our core cryptographic signing
+   304→        infrastructure and access to the public vulnerability database. Upgrade or downgrade at any time — no
+   305→        long-term contracts required for Free and Pro plans.
+   306→      </p>
+   307→
+   308→      <div className="grid gap-6 md:grid-cols-3 mb-16">
+   309→        {plans.map((plan) => (
+   310→          <Card
+   311→            key={plan.name}
+   312→            className={`bg-[#111827] border-gray-800 relative ${
+   313→              plan.highlighted ? 'border-[#667eea] ring-1 ring-[#667eea]/50' : ''
+   314→            }`}
+   315→          >
+   316→            {plan.highlighted && (
+   317→              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+   318→                <Badge className="bg-[#667eea] text-white border-0">Most Popular</Badge>
+   319→              </div>
+   320→            )}
+   321→            <CardHeader className="text-center">
+   322→              <CardTitle className="text-white text-xl">{plan.name}</CardTitle>
+   323→              <div className="mt-2">
+   324→                <span className="text-3xl font-bold text-white">{plan.price}</span>
+   325→                <span className="text-sm text-gray-400 ml-1">{plan.period}</span>
+   326→              </div>
+   327→              <CardDescription className="mt-2">{plan.description}</CardDescription>
+   328→            </CardHeader>
+   329→            <CardContent>
+   330→              <ul className="space-y-2">
+   331→                {plan.features.map((f) => (
+   332→                  <li key={f} className="flex items-start gap-2 text-sm text-gray-300">
+   333→                    <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+   334→                    {f}
+   335→                  </li>
+   336→                ))}
+   337→              </ul>
+   338→            </CardContent>
+   339→            <CardFooter>
+   340→              <Button
+   341→                className={`w-full ${
+   342→                  plan.highlighted
+   343→                    ? 'bg-[#667eea] hover:bg-[#5a6fd6] text-white'
+   344→                    : 'bg-gray-800 hover:bg-gray-700 text-gray-200'
+   345→                }`}
+   346→              >
+   347→                {plan.cta}
+   348→              </Button>
+   349→            </CardFooter>
+   350→          </Card>
+   351→        ))}
+   352→      </div>
+   353→
+   354→      <Separator className="bg-gray-800 mb-10" />
+   355→
+   356→      <h2 className="text-2xl font-bold text-white mb-6">Full Feature Comparison</h2>
+   357→      <Card className="bg-[#111827] border-gray-800 overflow-hidden">
+   358→        <CardContent className="p-0">
+   359→          <div className="overflow-x-auto">
+   360→            <table className="w-full text-sm">
+   361→              <thead>
+   362→                <tr className="border-b border-gray-800">
+   363→                  <th className="text-left px-4 py-3 font-medium text-gray-400">Feature</th>
+   364→                  <th className="text-center px-4 py-3 font-medium text-gray-400">Free</th>
+   365→                  <th className="text-center px-4 py-3 font-medium text-[#667eea]">Pro</th>
+   366→                  <th className="text-center px-4 py-3 font-medium text-gray-400">Enterprise</th>
+   367→                </tr>
+   368→              </thead>
+   369→              <tbody>
+   370→                {comparisons.map((row) => (
+   371→                  <tr key={row.feature} className="border-b border-gray-800/50">
+   372→                    <td className="px-4 py-3 text-gray-300">{row.feature}</td>
+   373→                    <td className="px-4 py-3 text-center text-gray-400">{row.free}</td>
+   374→                    <td className="px-4 py-3 text-center text-gray-200">{row.pro}</td>
+   375→                    <td className="px-4 py-3 text-center text-gray-200">{row.enterprise}</td>
+   376→                  </tr>
+   377→                ))}
+   378→              </tbody>
+   379→            </table>
+   380→          </div>
+   381→        </CardContent>
+   382→      </Card>
+   383→
+   384→      <p className="mt-8 text-sm text-gray-500 text-center">
+   385→        All prices are in USD. Pro plans are billed monthly or annually (save 20% with annual billing).
+   386→        Enterprise pricing includes volume discounts and custom contract terms.
+   387→      </p>
+   388→    </PageShell>
+   389→  );
+   390→}
+   391→
+   392→/* ─────────────────────────── DOCUMENTATION ─────────────────────────── */
+   393→
+   394→function DocumentationPage() {
+   395→  const categories = [
+   396→    {
+   397→      icon: <BookOpen className="h-6 w-6 text-[#667eea]" />,
+   398→      title: 'Getting Started',
+   399→      description: 'Quickstart guides, installation instructions, and your first signed model in under 10 minutes.',
+   400→      articles: ['Installation & Setup', 'Your First Signed Model', 'CLI Quick Reference', 'Dashboard Overview'],
+   401→    },
+   402→    {
+   403→      icon: <FileText className="h-6 w-6 text-[#667eea]" />,
+   404→      title: 'API Reference',
+   405→      description: 'Complete REST and gRPC API documentation with authentication, endpoints, and response schemas.',
+   406→      articles: ['Authentication (API Keys, OAuth)', 'Models API', 'Registries API', 'SBOM & Scanning API', 'Webhooks'],
+   407→    },
+   408→    {
+   409→      icon: <Code className="h-6 w-6 text-[#667eea]" />,
+   410→      title: 'CLI Documentation',
+   411→      description: 'Full CLI reference for the mvault command-line tool, including all subcommands and flags.',
+   412→      articles: ['Installation', 'mvault sign', 'mvault scan', 'mvault push / pull', 'mvault sbom'],
+   413→    },
+   414→    {
+   415→      icon: <Zap className="h-6 w-6 text-[#667eea]" />,
+   416→      title: 'Integration Guides',
+   417→      description: 'Step-by-step guides for integrating ModelVault with popular CI/CD platforms and MLOps tools.',
+   418→      articles: ['GitHub Actions', 'GitLab CI', 'MLflow Integration', 'Weights & Biases', 'ClearML Plugin', 'Kubernetes Admission Controller'],
+   419→    },
+   420→    {
+   421→      icon: <Lock className="h-6 w-6 text-[#667eea]" />,
+   422→      title: 'Security & Architecture',
+   423→      description: 'Deep dives into ModelVault\'s security architecture, encryption, and trust model.',
+   424→      articles: ['Trust Model Overview', 'Key Management', 'Sandbox Architecture', 'Compliance & Certifications'],
+   425→    },
+   426→    {
+   427→      icon: <Users className="h-6 w-6 text-[#667eea]" />,
+   428→      title: 'Administration',
+   429→      description: 'Organization management, user roles, audit logs, and configuration reference.',
+   430→      articles: ['Organization Settings', 'User Roles & Permissions', 'Audit Log Queries', 'SSO Configuration', 'Rate Limits'],
+   431→    },
+   432→  ];
+   433→
+   434→  return (
+   435→    <PageShell slug="documentation">
+   436→      <p className="text-gray-300 leading-relaxed mb-4">
+   437→        Our documentation is organized into six categories covering everything from initial setup to advanced
+   438→        enterprise configuration. Whether you&apos;re a machine learning engineer signing your first model or a
+   439→        security architect evaluating our platform for a Fortune 500 deployment, you&apos;ll find the resources
+   440→        you need here.
+   441→      </p>
+   442→      <p className="text-gray-300 leading-relaxed mb-10">
+   443→        All code examples are available as copy-pasteable snippets. Our API reference is generated directly from
+   444→        the OpenAPI 3.1 specification and is guaranteed to match the current production release. If you can&apos;t
+   445→        find what you&apos;re looking for, our support team is available via the chat widget or email.
+   446→      </p>
+   447→
+   448→      <div className="grid gap-6 sm:grid-cols-2">
+   449→        {categories.map((cat) => (
+   450→          <Card key={cat.title} className="bg-[#111827] border-gray-800 hover:border-[#667eea]/50 transition-colors">
+   451→            <CardHeader>
+   452→              <div className="flex items-center gap-3">
+   453→                {cat.icon}
+   454→                <CardTitle className="text-white text-lg">{cat.title}</CardTitle>
+   455→              </div>
+   456→              <CardDescription className="mt-1">{cat.description}</CardDescription>
+   457→            </CardHeader>
+   458→            <CardContent>
+   459→              <ul className="space-y-1.5">
+   460→                {cat.articles.map((a) => (
+   461→                  <li key={a} className="flex items-center gap-2 text-sm text-gray-400 hover:text-[#667eea] transition-colors cursor-pointer">
+   462→                    <ChevronRight className="h-3 w-3" />
+   463→                    {a}
+   464→                  </li>
+   465→                ))}
+   466→              </ul>
+   467→            </CardContent>
+   468→          </Card>
+   469→        ))}
+   470→      </div>
+   471→    </PageShell>
+   472→  );
+   473→}
+   474→
+   475→/* ─────────────────────────── STATUS ─────────────────────────── */
+   476→
+   477→function StatusPage() {
+   478→  const services = [
+   479→    { name: 'ModelVault API', icon: <Server className="h-5 w-5" />, status: 'Operational', latency: '42ms', uptime: '99.99%' },
+   480→    { name: 'Vulnerability Scanning', icon: <ScanLine className="h-5 w-5" />, status: 'Operational', latency: '—', uptime: '99.97%' },
+   481→    { name: 'Sandbox Analysis', icon: <Container className="h-5 w-5" />, status: 'Operational', latency: '—', uptime: '99.95%' },
+   482→    { name: 'Model Registry', icon: <Database className="h-5 w-5" />, status: 'Operational', latency: '28ms', uptime: '99.99%' },
+   483→    { name: 'Dashboard & Web App', icon: <LayoutDashboard className="h-5 w-5" />, status: 'Operational', latency: '115ms', uptime: '99.98%' },
+   484→  ];
+   485→
+   486→  const incidents = [
+   487→    { date: 'Jun 12, 2025 — 14:30 UTC', title: 'Degraded scanning performance', status: 'Resolved', duration: '2h 15m' },
+   488→    { date: 'May 28, 2025 — 09:15 UTC', title: 'Registry replication lag in EU-West-1', status: 'Resolved', duration: '45m' },
+   489→    { date: 'May 10, 2025 — 22:00 UTC', title: 'Scheduled maintenance — database migration', status: 'Completed', duration: '30m' },
+   490→  ];
+   491→
+   492→  const metrics = [
+   493→    { label: 'Uptime (30d)', value: '99.98%' },
+   494→    { label: 'Total Requests', value: '1.24B' },
+   495→    { label: 'Avg Response', value: '38ms' },
+   496→    { label: 'Error Rate', value: '0.003%' },
+   497→  ];
+   498→
+   499→  return (
+   500→    <PageShell slug="status">
+   501→      <div className="flex items-center gap-3 mb-8">
+   502→        <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+   503→        <span className="text-emerald-400 font-semibold text-lg">All Systems Operational</span>
+   504→      </div>
+   505→
+   506→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+   507→        {metrics.map((m) => (
+   508→          <Card key={m.label} className="bg-[#111827] border-gray-800">
+   509→            <CardContent className="pt-6 text-center">
+   510→              <p className="text-2xl font-bold text-white">{m.value}</p>
+   511→              <p className="text-sm text-gray-400 mt-1">{m.label}</p>
+   512→            </CardContent>
+   513→          </Card>
+   514→        ))}
+   515→      </div>
+   516→
+   517→      <h2 className="text-xl font-semibold text-white mb-4">Service Status</h2>
+   518→      <div className="space-y-3 mb-10">
+   519→        {services.map((s) => (
+   520→          <Card key={s.name} className="bg-[#111827] border-gray-800">
+   521→            <CardContent className="flex items-center justify-between py-4">
+   522→              <div className="flex items-center gap-4">
+   523→                <div className="text-gray-400">{s.icon}</div>
+   524→                <div>
+   525→                  <p className="font-medium text-white">{s.name}</p>
+   526→                  <p className="text-xs text-gray-500">Uptime: {s.uptime}</p>
+   527→                </div>
+   528→              </div>
+   529→              <div className="flex items-center gap-4">
+   530→                {s.latency !== '—' && (
+   531→                  <span className="text-sm text-gray-400 hidden sm:inline">{s.latency}</span>
+   532→                )}
+   533→                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">{s.status}</Badge>
+   534→              </div>
+   535→            </CardContent>
+   536→          </Card>
+   537→        ))}
+   538→      </div>
+   539→
+   540→      <h2 className="text-xl font-semibold text-white mb-4">Recent Incidents</h2>
+   541→      <div className="space-y-3">
+   542→        {incidents.map((inc) => (
+   543→          <Card key={inc.title} className="bg-[#111827] border-gray-800">
+   544→            <CardContent className="flex items-center justify-between py-4">
+   545→              <div>
+   546→                <p className="font-medium text-white text-sm">{inc.title}</p>
+   547→                <p className="text-xs text-gray-500 mt-0.5">{inc.date} · Duration: {inc.duration}</p>
+   548→              </div>
+   549→              <Badge variant="outline" className="border-emerald-500/30 text-emerald-400">
+   550→                {inc.status}
+   551→              </Badge>
+   552→            </CardContent>
+   553→          </Card>
+   554→        ))}
+   555→      </div>
+   556→      <p className="text-xs text-gray-500 mt-6 text-center">
+   557→        This page is updated every 60 seconds. Subscribe to our status RSS feed for real-time notifications.
+   558→      </p>
+   559→    </PageShell>
+   560→  );
+   561→}
+   562→
+   563→/* ─────────────────────────── ABOUT ─────────────────────────── */
+   564→
+   565→function AboutPage() {
+   566→  return (
+   567→    <PageShell slug="about">
+   568→      <section className="mb-10">
+   569→        <h2 className="text-2xl font-bold text-white mb-4">Our Mission</h2>
+   570→        <p className="text-gray-300 leading-relaxed mb-4">
+   571→          ModelVault was founded in 2023 with a singular mission: to secure the AI model supply chain from end to end.
+   572→          As organizations rapidly adopt machine learning, the attack surface has expanded dramatically. Model
+   573→          poisoning, weight manipulation, data exfiltration through inference-time behavior, and dependency confusion
+   574→          attacks represent genuine, growing threats that existing DevSecOps tooling was never designed to address.
+   575→        </p>
+   576→        <p className="text-gray-300 leading-relaxed mb-4">
+   577→          We believe that security should not be a bottleneck to innovation. Our platform is designed to integrate
+   578→          seamlessly into existing MLOps workflows — adding a critical security layer without slowing down your team.
+   579→          Every feature we build is guided by the principle that the most secure system is the one your engineers
+   580→          actually want to use.
+   581→        </p>
+   582→        <p className="text-gray-300 leading-relaxed">
+   583→          Today, ModelVault protects over 2 million model artifacts for organizations ranging from early-stage AI
+   584→          startups to Fortune 100 enterprises across financial services, healthcare, defense, and technology sectors.
+   585→        </p>
+   586→      </section>
+   587→
+   588→      <Separator className="bg-gray-800 mb-10" />
+   589→
+   590→      <section className="mb-10">
+   591→        <h2 className="text-2xl font-bold text-white mb-4">Our Founding Story</h2>
+   592→        <p className="text-gray-300 leading-relaxed mb-4">
+   593→          ModelVault was born from a real incident. In late 2022, our founding team — security researchers and ML
+   594→          engineers at a major cloud provider — discovered that a widely-used open-source language model had been
+   595→          silently replaced with a modified version on a public registry. The tampered model contained a backdoor
+   596→          that exfiltrated prompts to an external server. The model had been downloaded over 50,000 times before
+   597→          the compromise was detected.
+   598→        </p>
+   599→        <p className="text-gray-300 leading-relaxed mb-4">
+   600→          That experience made it clear: the AI ecosystem needed the same provenance, integrity, and vulnerability
+   601→          management infrastructure that the traditional software industry had built over two decades with tools like
+   602→          Sigstore, Snyk, and GitHub Dependabot — but adapted for the unique characteristics of machine learning
+   603→          models and their complex dependency graphs.
+   604→        </p>
+   605→        <p className="text-gray-300 leading-relaxed">
+   606→          We left our roles, secured seed funding from leading security and AI-focused venture firms, and built the
+   607→          first version of ModelVault in 90 days. The platform launched publicly in Q2 2024 and has since grown to
+   608→          become the de facto standard for AI model artifact security.
+   609→        </p>
+   610→      </section>
+   611→
+   612→      <Separator className="bg-gray-800 mb-10" />
+   613→
+   614→      <section>
+   615→        <h2 className="text-2xl font-bold text-white mb-6">Leadership Team</h2>
+   616→        <div className="grid gap-6 sm:grid-cols-2">
+   617→          {[
+   618→            {
+   619→              name: 'Dr. Sarah Chen',
+   620→              role: 'Co-founder & CEO',
+   621→              bio: 'Former principal security engineer at Google Cloud. PhD in cryptography from MIT. 15+ years in infrastructure security and supply-chain integrity.',
+   622→            },
+   623→            {
+   624→              name: 'Marcus Rivera',
+   625→              role: 'Co-founder & CTO',
+   626→              bio: 'Ex-staff ML engineer at Meta. Led the AI Safety team at a top-3 cloud provider. Author of the OSV AI-model extension specification.',
+   627→            },
+   628→            {
+   629→              name: 'Dr. Aisha Patel',
+   630→              role: 'VP of Engineering',
+   631→              bio: 'Previously engineering director at Datadog. Built observability platforms serving 20,000+ enterprise customers. Expert in distributed systems.',
+   632→            },
+   633→            {
+   634→              name: 'James O\'Brien',
+   635→              role: 'VP of Security',
+   636→              bio: 'Former CISO at a Series D fintech company. 20 years in cybersecurity, including roles at NSA and CrowdStrike. CISSP, CCSP, OSCP certified.',
+   637→            },
+   638→          ].map((person) => (
+   639→            <Card key={person.name} className="bg-[#111827] border-gray-800">
+   640→              <CardHeader>
+   641→                <div className="flex items-center gap-3">
+   642→                  <div className="h-12 w-12 rounded-full bg-[#667eea]/20 flex items-center justify-center text-[#667eea] font-bold text-lg">
+   643→                    {person.name.split(' ').map((n) => n[0]).join('')}
+   644→                  </div>
+   645→                  <div>
+   646→                    <CardTitle className="text-white">{person.name}</CardTitle>
+   647→                    <p className="text-sm text-[#667eea]">{person.role}</p>
+   648→                  </div>
+   649→                </div>
+   650→              </CardHeader>
+   651→              <CardContent>
+   652→                <p className="text-sm text-gray-400 leading-relaxed">{person.bio}</p>
+   653→              </CardContent>
+   654→            </Card>
+   655→          ))}
+   656→        </div>
+   657→      </section>
+   658→    </PageShell>
+   659→  );
+   660→}
+   661→
+   662→/* ─────────────────────────── BLOG ─────────────────────────── */
+   663→
+   664→function BlogPage() {
+   665→  const posts = [
+   666→    {
+   667→      date: 'June 15, 2025',
+   668→      title: 'The Hidden Attack Surface of Fine-Tuned Models: A Deep Dive into Weight Poisoning',
+   669→      excerpt:
+   670→        'Fine-tuning a pre-trained model on untrusted data can introduce subtle but devastating vulnerabilities. In this post, we analyze three real-world case studies where weight poisoning during fine-tuning led to targeted misclassification, prompt leakage, and covert data exfiltration. We demonstrate how ModelVault\'s sandbox analysis detects these anomalies before deployment.',
+   671→      tags: ['Research', 'Weight Poisoning', 'Sandbox'],
+   672→    },
+   673→    {
+   674→      date: 'June 2, 2025',
+   675→      title: 'Implementing Sigstore for AI Models: Lessons from Securing 2 Million Artifacts',
+   676→      excerpt:
+   677→        'Over the past year, ModelVault has signed and verified over 2 million AI model artifacts using Sigstore-compatible infrastructure. This post shares the architectural decisions, scaling challenges, and lessons learned from operating Sigstore at this scale — including our custom Rekor transparency log optimizations and Fulcio integration patterns.',
+   678→      tags: ['Engineering', 'Sigstore', 'Architecture'],
+   679→    },
+   680→    {
+   681→      date: 'May 18, 2025',
+   682→      title: 'SBOMs for Machine Learning: Why CycloneDX ML Is a Game Changer',
+   683→      excerpt:
+   684→        'The CycloneDX 1.6 specification introduced dedicated fields for ML model metadata — training data provenance, hyperparameter hashes, and runtime dependency declarations. We explore how these additions enable more precise vulnerability matching and why every ML team should generate ML-aware SBOMs as part of their CI pipeline.',
+   685→      tags: ['SBOM', 'CycloneDX', 'Standards'],
+   686→    },
+   687→    {
+   688→      date: 'May 1, 2025',
+   689→      title: 'From NVD to OSV: Building an AI-Specific Vulnerability Database',
+   690→      excerpt:
+   691→        'Traditional vulnerability databases like the NVD were designed for software libraries, not AI models. Our security research team has built a complementary vulnerability database specifically for ML frameworks, model formats, and common model-level attack patterns. This post describes our taxonomy, ingestion pipeline, and the 10,000+ entries we\'ve cataloged so far.',
+   692→      tags: ['Security', 'Vulnerability Database', 'Research'],
+   693→    },
+   694→  ];
+   695→
+   696→  return (
+   697→    <PageShell slug="blog">
+   698→      <p className="text-gray-300 leading-relaxed mb-10">
+   699→        Insights, technical deep-dives, and security research from the ModelVault team. We publish
+   700→        approximately twice per month on topics spanning AI supply-chain security, cryptography for model
+   701→        integrity, regulatory compliance, and engineering at scale.
+   702→      </p>
+   703→      <div className="space-y-6">
+   704→        {posts.map((post) => (
+   705→          <Card key={post.title} className="bg-[#111827] border-gray-800 hover:border-[#667eea]/50 transition-colors">
+   706→            <CardHeader>
+   707→              <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+   708→                <Clock className="h-3.5 w-3.5" />
+   709→                {post.date}
+   710→              </div>
+   711→              <CardTitle className="text-white text-lg leading-snug">{post.title}</CardTitle>
+   712→            </CardHeader>
+   713→            <CardContent className="space-y-4">
+   714→              <p className="text-gray-300 text-sm leading-relaxed">{post.excerpt}</p>
+   715→              <div className="flex gap-2 flex-wrap">
+   716→                {post.tags.map((tag) => (
+   717→                  <Badge key={tag} variant="outline" className="border-gray-700 text-gray-400 text-xs">
+   718→                    {tag}
+   719→                  </Badge>
+   720→                ))}
+   721→              </div>
+   722→            </CardContent>
+   723→            <CardFooter>
+   724→              <span className="text-sm text-[#667eea] flex items-center gap-1 cursor-pointer hover:underline">
+   725→                Read more <ExternalLink className="h-3.5 w-3.5" />
+   726→              </span>
+   727→            </CardFooter>
+   728→          </Card>
+   729→        ))}
+   730→      </div>
+   731→    </PageShell>
+   732→  );
+   733→}
+   734→
+   735→/* ─────────────────────────── CAREERS ─────────────────────────── */
+   736→
+   737→function CareersPage() {
+   738→  const jobs = [
+   739→    {
+   740→      title: 'Senior ML Security Engineer',
+   741→      team: 'Security Engineering',
+   742→      location: 'San Francisco, CA (Hybrid)',
+   743→      type: 'Full-time',
+   744→      description:
+   745→        'We are looking for a senior engineer with deep expertise in both machine learning systems and cybersecurity to join our core security team. You will design and implement new sandbox analysis techniques, improve our behavioral anomaly detection algorithms, and contribute to our open-source scanning tools. This role requires strong Python and Rust skills, familiarity with model serialization formats (Safetensors, GGUF, ONNX), and experience with container isolation technologies.',
+   746→      requirements: [
+   747→        '7+ years of software engineering experience',
+   748→        '3+ years in ML infrastructure or security research',
+   749→        'Strong proficiency in Python and Rust',
+   750→        'Experience with container sandboxing (gVisor, Firecracker)',
+   751→        'Published research in ML security preferred',
+   752→      ],
+   753→    },
+   754→    {
+   755→      title: 'Staff Backend Engineer — Registry & Storage',
+   756→      team: 'Platform Engineering',
+   757→      location: 'Remote (US/EU)',
+   758→      type: 'Full-time',
+   759→      description:
+   760→        'Lead the engineering team responsible for ModelVault\'s globally distributed model registry. You will architect and implement our next-generation content-addressable storage layer, optimize replication across 12 global regions, and ensure sub-100ms pull latency at petabyte scale. The ideal candidate has extensive experience building distributed storage systems and deep familiarity with object storage protocols.',
+   761→      requirements: [
+   762→        '10+ years of backend engineering experience',
+   763→        'Experience building distributed storage systems at scale',
+   764→        'Proficiency in Go or Rust',
+   765→        'Familiarity with S3, GCS, and content-addressable storage',
+   766→        'Experience with multi-region data replication',
+   767→      ],
+   768→    },
+   769→    {
+   770→      title: 'Product Designer — Security & Developer Tools',
+   771→      team: 'Design',
+   772→      location: 'New York, NY (Hybrid)',
+   773→      type: 'Full-time',
+   774→      description:
+   775→        'Shape the user experience of ModelVault\'s dashboard, CLI, and API documentation. You will work closely with engineers, security researchers, and our customers to translate complex security concepts into intuitive, approachable interfaces. This role requires experience designing developer tools or security products, strong systems thinking, and the ability to create clear visualizations of vulnerability data and compliance status.',
+   776→      requirements: [
+   777→        '5+ years of product design experience',
+   778→        'Portfolio showing developer tools or security product design',
+   779→        'Proficiency in Figma and prototyping tools',
+   780→        'Experience with design systems and component libraries',
+   781→        'Strong communication skills and cross-functional collaboration',
+   782→      ],
+   783→    },
+   784→    {
+   785→      title: 'Security Compliance Specialist',
+   786→      team: 'Security & Compliance',
+   787→      location: 'Washington, DC (Hybrid)',
+   788→      type: 'Full-time',
+   789→      description:
+   790→        'Drive ModelVault\'s compliance program across SOC 2 Type II, ISO 27001, and FedRAMP frameworks. You will manage audit processes, maintain evidence repositories, coordinate with external auditors, and work with engineering to ensure continuous compliance. The ideal candidate has direct experience managing compliance programs at SaaS companies and familiarity with cloud security frameworks.',
+   791→      requirements: [
+   792→        '5+ years in information security compliance',
+   793→        'Direct experience with SOC 2, ISO 27001, and/or FedRAMP',
+   794→        'CISSP, CISA, or equivalent certification',
+   795→        'Experience with GRC tools (Vanta, Drata, or similar)',
+   796→        'Strong written communication for audit documentation',
+   797→      ],
+   798→    },
+   799→  ];
+   800→
+   801→  return (
+   802→    <PageShell slug="careers">
+   803→      <section className="mb-10">
+   804→        <p className="text-gray-300 leading-relaxed mb-4">
+   805→          ModelVault is a remote-friendly company with offices in San Francisco, New York, and London. We offer
+   806→          competitive compensation (base + equity), comprehensive health benefits, unlimited PTO, a $5,000 annual
+   807→          learning stipend, and a home office budget. We are an equal-opportunity employer and value diversity
+   808→          in all forms.
+   809→        </p>
+   810→        <p className="text-gray-300 leading-relaxed">
+   811→          We are a team of 85 and growing. If you are passionate about securing the AI ecosystem and want to
+   812→          work on technology that protects millions of users, we would love to hear from you.
+   813→        </p>
+   814→      </section>
+   815→
+   816→      <div className="space-y-6">
+   817→        {jobs.map((job) => (
+   818→          <Card key={job.title} className="bg-[#111827] border-gray-800 hover:border-[#667eea]/50 transition-colors">
+   819→            <CardHeader>
+   820→              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+   821→                <CardTitle className="text-white text-lg">{job.title}</CardTitle>
+   822→                <div className="flex gap-2 flex-wrap">
+   823→                  <Badge variant="outline" className="border-gray-700 text-gray-400">{job.location}</Badge>
+   824→                  <Badge variant="outline" className="border-gray-700 text-gray-400">{job.type}</Badge>
+   825→                </div>
+   826→              </div>
+   827→              <CardDescription className="text-[#667eea]">{job.team}</CardDescription>
+   828→            </CardHeader>
+   829→            <CardContent className="space-y-4">
+   830→              <p className="text-gray-300 text-sm leading-relaxed">{job.description}</p>
+   831→              <div>
+   832→                <p className="text-sm font-medium text-gray-200 mb-2">Key Requirements</p>
+   833→                <ul className="space-y-1.5">
+   834→                  {job.requirements.map((r) => (
+   835→                    <li key={r} className="flex items-start gap-2 text-sm text-gray-400">
+   836→                      <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+   837→                      {r}
+   838→                    </li>
+   839→                  ))}
+   840→                </ul>
+   841→              </div>
+   842→            </CardContent>
+   843→            <CardFooter>
+   844→              <Button className="bg-[#667eea] hover:bg-[#5a6fd6] text-white">Apply Now</Button>
+   845→            </CardFooter>
+   846→          </Card>
+   847→        ))}
+   848→      </div>
+   849→    </PageShell>
+   850→  );
+   851→}
+   852→
+   853→/* ─────────────────────────── CONTACT ─────────────────────────── */
+   854→
+   855→function ContactPage() {
+   856→  return (
+   857→    <PageShell slug="contact">
+   858→      <p className="text-gray-300 leading-relaxed mb-10">
+   859→        Whether you have a technical question, need enterprise pricing, or want to report a security
+   860→        vulnerability, our team is here to help. Use the form below or reach out through any of the
+   861→        channels listed. We aim to respond to all inquiries within one business day.
+   862→      </p>
+   863→
+   864→      <div className="grid gap-10 md:grid-cols-2">
+   865→        {/* Contact Form */}
+   866→        <Card className="bg-[#111827] border-gray-800">
+   867→          <CardHeader>
+   868→            <CardTitle className="text-white text-lg">Send Us a Message</CardTitle>
+   869→            <CardDescription>Fill out the form and we&apos;ll get back to you promptly.</CardDescription>
+   870→          </CardHeader>
+   871→          <CardContent>
+   872→            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+   873→              <div className="grid gap-4 sm:grid-cols-2">
+   874→                <div className="space-y-2">
+   875→                  <Label htmlFor="contact-name" className="text-gray-300">Full Name</Label>
+   876→                  <Input id="contact-name" placeholder="Jane Smith" className="bg-[#0A0E1A] border-gray-700 text-gray-200" />
+   877→                </div>
+   878→                <div className="space-y-2">
+   879→                  <Label htmlFor="contact-email" className="text-gray-300">Email</Label>
+   880→                  <Input id="contact-email" type="email" placeholder="jane@company.com" className="bg-[#0A0E1A] border-gray-700 text-gray-200" />
+   881→                </div>
+   882→              </div>
+   883→              <div className="space-y-2">
+   884→                <Label htmlFor="contact-company" className="text-gray-300">Company</Label>
+   885→                <Input id="contact-company" placeholder="Acme Corp" className="bg-[#0A0E1A] border-gray-700 text-gray-200" />
+   886→              </div>
+   887→              <div className="space-y-2">
+   888→                <Label htmlFor="contact-subject" className="text-gray-300">Subject</Label>
+   889→                <Input id="contact-subject" placeholder="Enterprise pricing inquiry" className="bg-[#0A0E1A] border-gray-700 text-gray-200" />
+   890→              </div>
+   891→              <div className="space-y-2">
+   892→                <Label htmlFor="contact-message" className="text-gray-300">Message</Label>
+   893→                <Textarea id="contact-message" placeholder="Tell us how we can help..." rows={5} className="bg-[#0A0E1A] border-gray-700 text-gray-200" />
+   894→              </div>
+   895→              <Button type="submit" className="w-full bg-[#667eea] hover:bg-[#5a6fd6] text-white">
+   896→                Send Message
+   897→              </Button>
+   898→            </form>
+   899→          </CardContent>
+   900→        </Card>
+   901→
+   902→        {/* Contact Info */}
+   903→        <div className="space-y-6">
+   904→          <Card className="bg-[#111827] border-gray-800">
+   905→            <CardHeader>
+   906→              <CardTitle className="text-white text-lg">General Inquiries</CardTitle>
+   907→            </CardHeader>
+   908→            <CardContent className="space-y-4">
+   909→              <div className="flex items-center gap-3">
+   910→                <Mail className="h-5 w-5 text-[#667eea]" />
+   911→                <div>
+   912→                  <p className="text-sm text-gray-400">Email</p>
+   913→                  <p className="text-gray-200">contact@modelvault.dev</p>
+   914→                </div>
+   915→              </div>
+   916→              <div className="flex items-center gap-3">
+   917→                <Phone className="h-5 w-5 text-[#667eea]" />
+   918→                <div>
+   919→                  <p className="text-sm text-gray-400">Phone</p>
+   920→                  <p className="text-gray-200">+1 (415) 555-0192</p>
+   921→                </div>
+   922→              </div>
+   923→              <div className="flex items-center gap-3">
+   924→                <MapPin className="h-5 w-5 text-[#667eea]" />
+   925→                <div>
+   926→                  <p className="text-sm text-gray-400">Headquarters</p>
+   927→                  <p className="text-gray-200">548 Market St, Suite 350<br />San Francisco, CA 94104</p>
+   928→                </div>
+   929→              </div>
+   930→            </CardContent>
+   931→          </Card>
+   932→
+   933→          <Card className="bg-[#111827] border-gray-800">
+   934→            <CardHeader>
+   935→              <CardTitle className="text-white text-lg">Department Contacts</CardTitle>
+   936→            </CardHeader>
+   937→            <CardContent className="space-y-3">
+   938→              <div>
+   939→                <p className="text-sm font-medium text-gray-200">Enterprise Sales</p>
+   940→                <p className="text-sm text-gray-400">sales@modelvault.dev</p>
+   941→              </div>
+   942→              <Separator className="bg-gray-800" />
+   943→              <div>
+   944→                <p className="text-sm font-medium text-gray-200">Security & Vulnerability Reports</p>
+   945→                <p className="text-sm text-gray-400">security@modelvault.dev</p>
+   946→              </div>
+   947→              <Separator className="bg-gray-800" />
+   948→              <div>
+   949→                <p className="text-sm font-medium text-gray-200">Technical Support</p>
+   950→                <p className="text-sm text-gray-400">support@modelvault.dev</p>
+   951→              </div>
+   952→              <Separator className="bg-gray-800" />
+   953→              <div>
+   954→                <p className="text-sm font-medium text-gray-200">Partnerships</p>
+   955→                <p className="text-sm text-gray-400">partners@modelvault.dev</p>
+   956→              </div>
+   957→            </CardContent>
+   958→          </Card>
+   959→        </div>
+   960→      </div>
+   961→    </PageShell>
+   962→  );
+   963→}
+   964→
+   965→/* ─────────────────────────── WHITEPAPER ─────────────────────────── */
+   966→
+   967→function WhitepaperPage() {
+   968→  return (
+   969→    <PageShell slug="whitepaper">
+   970→      <section className="mb-10">
+   971→        <h2 className="text-2xl font-bold text-white mb-4">Securing the AI Model Supply Chain</h2>
+   972→        <p className="text-gray-300 leading-relaxed mb-4">
+   973→          Our comprehensive whitepaper — &ldquo;Securing the AI Model Supply Chain: Threats, Architectures, and Best
+   974→          Practices&rdquo; — is a 48-page technical document that provides a thorough analysis of the AI model
+   975→          supply-chain threat landscape. Authored by our security research team in collaboration with academic
+   976→          partners from MIT CSAIL and Stanford HAI, the whitepaper has been cited by NIST and referenced in the
+   977→          upcoming OWASP AI Security Top 10.
+   978→        </p>
+   979→        <p className="text-gray-300 leading-relaxed">
+   980→          The paper covers the full attack lifecycle from model acquisition to deployment, introduces our
+   981→          multi-layered defense architecture, and presents quantitative data from our analysis of over 500,000
+   982→          public model artifacts. Key findings include that 12.3% of popular models on public registries contain
+   983→          at least one known vulnerable dependency, and 0.7% exhibit suspicious behavioral patterns consistent
+   984→          with supply-chain tampering.
+   985→        </p>
+   986→      </section>
+   987→
+   988→      <Card className="bg-[#111827] border-gray-800 mb-10">
+   989→        <CardHeader>
+   990→          <CardTitle className="text-white text-lg">What&apos;s Inside</CardTitle>
+   991→        </CardHeader>
+   992→        <CardContent>
+   993→          <div className="grid gap-4 sm:grid-cols-2">
+   994→            {[
+   995→              { title: 'Chapter 1', desc: 'Threat Taxonomy — A comprehensive classification of 23 distinct attack vectors targeting AI model artifacts.' },
+   996→              { title: 'Chapter 2', desc: 'Case Studies — Detailed analysis of six real-world supply-chain incidents affecting AI models.' },
+   997→              { title: 'Chapter 3', desc: 'Cryptographic Provenance — How Sigstore and content-addressable storage establish model authenticity.' },
+   998→              { title: 'Chapter 4', desc: 'SBOM-Driven Vulnerability Management — Extending traditional SBOM practices for ML dependency graphs.' },
+   999→              { title: 'Chapter 5', desc: 'Runtime Behavioral Analysis — Sandbox-based detection of covert model behavior.' },
+  1000→              { title: 'Chapter 6', desc: 'Enterprise Deployment — Architecture patterns, RBAC models, and compliance integration.' },
+  1001→            ].map((ch) => (
+  1002→              <div key={ch.title} className="flex gap-3">
+  1003→                <BookOpen className="h-5 w-5 text-[#667eea] shrink-0 mt-0.5" />
+  1004→                <div>
+  1005→                  <p className="text-sm font-medium text-gray-200">{ch.title}</p>
+  1006→                  <p className="text-sm text-gray-400">{ch.desc}</p>
+  1007→                </div>
+  1008→              </div>
+  1009→            ))}
+  1010→          </div>
+  1011→        </CardContent>
+  1012→      </Card>
+  1013→
+  1014→      <Card className="bg-gradient-to-r from-[#667eea]/10 to-[#764ba2]/10 border-[#667eea]/30">
+  1015→        <CardContent className="flex flex-col sm:flex-row items-center gap-6 py-8">
+  1016→          <div className="flex-1">
+  1017→            <h3 className="text-xl font-bold text-white mb-2">Download the Full Whitepaper</h3>
+  1018→            <p className="text-sm text-gray-300">
+  1019→              Available as a PDF (3.2 MB). No registration required. Published June 2025, version 2.1.
+  1020→            </p>
+  1021→          </div>
+  1022→          <Button className="bg-[#667eea] hover:bg-[#5a6fd6] text-white shrink-0">
+  1023→            <Download className="h-4 w-4 mr-2" />
+  1024→            Download PDF
+  1025→          </Button>
+  1026→        </CardContent>
+  1027→      </Card>
+  1028→    </PageShell>
+  1029→  );
+  1030→}
+  1031→
+  1032→/* ─────────────────────────── COMPLIANCE ─────────────────────────── */
+  1033→
+  1034→function CompliancePage() {
+  1035→  const frameworks = [
+  1036→    {
+  1037→      name: 'SOC 2 Type II',
+  1038→      status: 'Certified',
+  1039→      description:
+  1040→        'ModelVault has completed its SOC 2 Type II audit, covering the Trust Service Criteria for Security, Availability, and Confidentiality. Our audit is conducted annually by a CPA firm registered with the AICPA, and our latest report (FY2024) confirms full compliance across all applicable controls. Our SOC 2 report is available under NDA for prospective enterprise customers and their auditors.',
+  1041→      details: [
+  1042→        'Audit firm: Schellman & Company, LLC',
+  1043→        'Latest report period: January 2024 – December 2024',
+  1044→        'Trust Service Criteria: Security, Availability, Confidentiality',
+  1045→        'Report available under NDA upon request',
+  1046→      ],
+  1047→    },
+  1048→    {
+  1049→      name: 'ISO 27001:2022',
+  1050→      status: 'Certified',
+  1051→      description:
+  1052→        'Our Information Security Management System (ISMS) is certified to ISO/IEC 27001:2022, covering all aspects of ModelVault\'s cloud infrastructure, development practices, and operational procedures. The certification encompasses our core platform, support operations, and internal tooling. Certificate number: ISM-2024-84721.',
+  1053→      details: [
+  1054→        'Certification body: BSI Group',
+  1055→        'Scope: Cloud platform, development, and operations',
+  1056→        'Certificate number: ISM-2024-84721',
+  1057→        'Surveillance audits conducted quarterly',
+  1058→      ],
+  1059→    },
+  1060→    {
+  1061→      name: 'FedRAMP',
+  1062→      status: 'In Process',
+  1063→      description:
+  1064→        'ModelVault is actively pursuing FedRAMP Moderate authorization. We have completed the security assessment phase and are currently in the remediation and POA&M closure stage. Our Authorization to Operate (ATO) package has been submitted to the FedRAMP PMO and is under review. We expect to achieve authorization in Q4 2025. In the meantime, we can provide a self-attestation and a completed SSP for agencies requiring pre-ATO evaluations.',
+  1065→      details: [
+  1066→        'Impact level: Moderate',
+  1067→        '3PAO: Coalfire Systems',
+  1068→        'Current stage: POA&M closure and remediation',
+  1069→        'Expected authorization: Q4 2025',
+  1070→      ],
+  1071→    },
+  1072→  ];
+  1073→
+  1074→  return (
+  1075→    <PageShell slug="compliance">
+  1076→      <p className="text-gray-300 leading-relaxed mb-4">
+  1077→        Security and compliance are foundational to ModelVault&apos;s business. We maintain a comprehensive
+  1078→        compliance program that undergoes continuous monitoring and regular third-party assessment. Our
+  1079→        security controls are designed to meet the most stringent requirements across regulated industries
+  1080→        including financial services, healthcare, and government.
+  1081→      </p>
+  1082→      <p className="text-gray-300 leading-relaxed mb-10">
+  1083→        All customer data is encrypted at rest (AES-256-GCM) and in transit (TLS 1.3). Our infrastructure
+  1084→        runs on dedicated tenant-isolated VPCs within AWS and GCP, with no shared compute resources between
+  1085→        customers. We maintain a bug bounty program, conduct quarterly penetration tests, and operate a
+  1086→        full-time internal red team.
+  1087→      </p>
+  1088→
+  1089→      <div className="space-y-6">
+  1090→        {frameworks.map((fw) => (
+  1091→          <Card key={fw.name} className="bg-[#111827] border-gray-800">
+  1092→            <CardHeader>
+  1093→              <div className="flex items-center justify-between">
+  1094→                <CardTitle className="text-white text-lg">{fw.name}</CardTitle>
+  1095→                <Badge
+  1096→                  className={
+  1097→                    fw.status === 'Certified'
+  1098→                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+  1099→                      : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+  1100→                  }
+  1101→                >
+  1102→                  {fw.status}
+  1103→                </Badge>
+  1104→              </div>
+  1105→            </CardHeader>
+  1106→            <CardContent className="space-y-4">
+  1107→              <p className="text-sm text-gray-300 leading-relaxed">{fw.description}</p>
+  1108→              <ul className="space-y-1.5">
+  1109→                {fw.details.map((d) => (
+  1110→                  <li key={d} className="flex items-start gap-2 text-sm text-gray-400">
+  1111→                    <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+  1112→                    {d}
+  1113→                  </li>
+  1114→                ))}
+  1115→              </ul>
+  1116→            </CardContent>
+  1117→          </Card>
+  1118→        ))}
+  1119→      </div>
+  1120→
+  1121→      <div className="mt-10 rounded-lg bg-[#111827] border border-gray-800 p-6">
+  1122→        <h3 className="text-lg font-semibold text-white mb-2">Request Compliance Documentation</h3>
+  1123→        <p className="text-sm text-gray-400 mb-4">
+  1124→          SOC 2 reports, ISO certificates, and security questionnaires are available to customers and
+  1125→          prospective customers under NDA. Contact our security team at compliance@modelvault.dev.
+  1126→        </p>
+  1127→        <Button variant="outline" className="border-[#667eea] text-[#667eea] hover:bg-[#667eea]/10">
+  1128→          <Mail className="h-4 w-4 mr-2" />
+  1129→          Request Access
+  1130→        </Button>
+  1131→      </div>
+  1132→    </PageShell>
+  1133→  );
+  1134→}
+  1135→
+  1136→/* ─────────────────────────── BUG BOUNTY ─────────────────────────── */
+  1137→
+  1138→function BugBountyPage() {
+  1139→  return (
+  1140→    <PageShell slug="bug-bounty">
+  1141→      <section className="mb-10">
+  1142→        <h2 className="text-2xl font-bold text-white mb-4">Program Overview</h2>
+  1143→        <p className="text-gray-300 leading-relaxed mb-4">
+  1144→          ModelVault operates a public bug bounty program to encourage security researchers to help us identify
+  1145→          and resolve vulnerabilities before they can be exploited. We believe in responsible disclosure and
+  1146→          are committed to working collaboratively with the security community. Our program is hosted on HackerOne
+  1147→          and is open to all researchers worldwide.
+  1148→        </p>
+  1149→        <p className="text-gray-300 leading-relaxed">
+  1150→          We value quality reports that include clear reproduction steps, impact analysis, and ideally a proposed
+  1151→          fix. Reports that demonstrate real-world exploitability receive higher bounty awards. We triage all
+  1152→          submissions within 24 hours (business days) and aim to resolve critical issues within 72 hours.
+  1153→        </p>
+  1154→      </section>
+  1155→
+  1156→      <Card className="bg-[#111827] border-gray-800 mb-10">
+  1157→        <CardHeader>
+  1158→          <CardTitle className="text-white text-lg">Rewards</CardTitle>
+  1159→        </CardHeader>
+  1160→        <CardContent>
+  1161→          <div className="overflow-x-auto">
+  1162→            <table className="w-full text-sm">
+  1163→              <thead>
+  1164→                <tr className="border-b border-gray-800">
+  1165→                  <th className="text-left py-3 pr-4 font-medium text-gray-400">Severity</th>
+  1166→                  <th className="text-left py-3 pr-4 font-medium text-gray-400">Base Reward</th>
+  1167→                  <th className="text-left py-3 font-medium text-gray-400">Max Reward</th>
+  1168→                </tr>
+  1169→              </thead>
+  1170→              <tbody>
+  1171→                {[
+  1172→                  { severity: 'Critical', base: '$5,000', max: '$25,000', color: 'text-red-400' },
+  1173→                  { severity: 'High', base: '$2,000', max: '$10,000', color: 'text-orange-400' },
+  1174→                  { severity: 'Medium', base: '$500', max: '$3,000', color: 'text-amber-400' },
+  1175→                  { severity: 'Low', base: '$100', max: '$500', color: 'text-yellow-400' },
+  1176→                ].map((row) => (
+  1177→                  <tr key={row.severity} className="border-b border-gray-800/50">
+  1178→                    <td className={`py-3 pr-4 font-medium ${row.color}`}>{row.severity}</td>
+  1179→                    <td className="py-3 pr-4 text-gray-300">{row.base}</td>
+  1180→                    <td className="py-3 text-gray-300">{row.max}</td>
+  1181→                  </tr>
+  1182→                ))}
+  1183→              </tbody>
+  1184→            </table>
+  1185→          </div>
+  1186→          <p className="text-xs text-gray-500 mt-4">
+  1187→            Rewards are multiplied for high-impact demonstrations (e.g., full account takeover, data exfiltration
+  1188→            proof-of-concept). Bounties are paid via HackerOne within 7 business days of fix deployment.
+  1189→          </p>
+  1190→        </CardContent>
+  1191→      </Card>
+  1192→
+  1193→      <section className="mb-10">
+  1194→        <h2 className="text-2xl font-bold text-white mb-4">Scope</h2>
+  1195→        <div className="grid gap-4 sm:grid-cols-2">
+  1196→          <Card className="bg-[#111827] border-gray-800">
+  1197→            <CardHeader>
+  1198→              <CardTitle className="text-emerald-400 text-base flex items-center gap-2">
+  1199→                <CheckCircle2 className="h-5 w-5" /> In Scope
+  1200→              </CardTitle>
+  1201→            </CardHeader>
+  1202→            <CardContent>
+  1203→              <ul className="space-y-1.5 text-sm text-gray-300">
+  1204→                <li>• app.modelvault.dev (web application)</li>
+  1205→                <li>• api.modelvault.dev (REST API)</li>
+  1206→                <li>• registry.modelvault.dev (OCI registry)</li>
+  1207→                <li>• Authentication and authorization mechanisms</li>
+  1208→                <li>• Model upload, signing, and download flows</li>
+  1209→                <li>• Organization and RBAC functionality</li>
+  1210→                <li>• API key and token management</li>
+  1211→                <li>• Webhook delivery and verification</li>
+  1212→              </ul>
+  1213→            </CardContent>
+  1214→          </Card>
+  1215→          <Card className="bg-[#111827] border-gray-800">
+  1216→            <CardHeader>
+  1217→              <CardTitle className="text-red-400 text-base flex items-center gap-2">
+  1218→                <AlertTriangle className="h-5 w-5" /> Out of Scope
+  1219→              </CardTitle>
+  1220→            </CardHeader>
+  1221→            <CardContent>
+  1222→              <ul className="space-y-1.5 text-sm text-gray-300">
+  1223→                <li>• Social engineering / phishing</li>
+  1224→                <li>• Denial of service attacks</li>
+  1225→                <li>• Third-party services (Stripe, Auth0)</li>
+  1226→                <li>• Physical access attacks</li>
+  1227→                <li>• Missing HTTP security headers (informational)</li>
+  1228→                <li>• Self-XSS (requires victim interaction)</li>
+  1229→                <li>• Rate limiting (unless exploitable for auth bypass)</li>
+  1230→                <li>• Content spoofing without security impact</li>
+  1231→              </ul>
+  1232→            </CardContent>
+  1233→          </Card>
+  1234→        </div>
+  1235→      </section>
+  1236→
+  1237→      <Card className="bg-gradient-to-r from-[#667eea]/10 to-[#764ba2]/10 border-[#667eea]/30">
+  1238→        <CardContent className="flex flex-col sm:flex-row items-center gap-6 py-8">
+  1239→          <div className="flex-1">
+  1240→            <h3 className="text-xl font-bold text-white mb-2">Ready to Participate?</h3>
+  1241→            <p className="text-sm text-gray-300">
+  1242→              Submit your findings through our HackerOne program. Please review our full policy before submitting.
+  1243→            </p>
+  1244→          </div>
+  1245→          <Button className="bg-[#667eea] hover:bg-[#5a6fd6] text-white shrink-0">
+  1246→            <Bug className="h-4 w-4 mr-2" />
+  1247→            HackerOne Program
+  1248→          </Button>
+  1249→        </CardContent>
+  1250→      </Card>
+  1251→    </PageShell>
+  1252→  );
+  1253→}
+  1254→
+  1255→/* ─────────────────────────── PRIVACY ─────────────────────────── */
+  1256→
+  1257→function PrivacyPage() {
+  1258→  return (
+  1259→    <PageShell slug="privacy">
+  1260→      <p className="text-gray-300 leading-relaxed mb-10">
+  1261→        At ModelVault, privacy is not an afterthought — it is a core design principle. As a platform that handles
+  1262→        sensitive AI model artifacts, intellectual property, and organizational security data, we understand the
+  1263→        trust our customers place in us. This page provides a high-level overview of our privacy practices.
+  1264→        For the full legal text, please see our detailed Privacy Policy.
+  1265→      </p>
+  1266→
+  1267→      <section className="mb-10">
+  1268→        <h2 className="text-2xl font-bold text-white mb-4">Data Collection Principles</h2>
+  1269→        <p className="text-gray-300 leading-relaxed mb-4">
+  1270→          We collect only the minimum data necessary to provide and improve our service. Our data collection
+  1271→          practices follow the principles of data minimization, purpose limitation, and storage limitation as
+  1272→          outlined in GDPR Article 5. We do not sell, rent, or share customer data with third parties for
+  1273→          marketing or advertising purposes.
+  1274→        </p>
+  1275→        <p className="text-gray-300 leading-relaxed">
+  1276→          Model artifacts uploaded to our registry are stored as-is and encrypted at rest. We do not inspect,
+  1277→          analyze, or derive insights from the contents of customer model files unless explicitly requested
+  1278→          as part of a paid scanning or sandbox analysis service. Even in those cases, analysis results are
+  1279→          accessible only to the customer who initiated the scan.
+  1280→        </p>
+  1281→      </section>
+  1282→
+  1283→      <section className="mb-10">
+  1284→        <h2 className="text-2xl font-bold text-white mb-4">Your Rights</h2>
+  1285→        <div className="grid gap-4 sm:grid-cols-2">
+  1286→          {[
+  1287→            { icon: <Eye className="h-5 w-5 text-[#667eea]" />, title: 'Access', desc: 'You can request a copy of all personal data we hold about you at any time.' },
+  1288→            { icon: <FileText className="h-5 w-5 text-[#667eea]" />, title: 'Portability', desc: 'Export your data in machine-readable formats (JSON, CSV) through our dashboard or API.' },
+  1289→            { icon: <Scale className="h-5 w-5 text-[#667eea]" />, title: 'Rectification', desc: 'Request corrections to inaccurate or incomplete personal data.' },
+  1290→            { icon: <Shield className="h-5 w-5 text-[#667eea]" />, title: 'Deletion', desc: 'Request deletion of your personal data, subject to legal retention requirements.' },
+  1291→          ].map((right) => (
+  1292→            <Card key={right.title} className="bg-[#111827] border-gray-800">
+  1293→              <CardContent className="flex items-start gap-4 py-6">
+  1294→                {right.icon}
+  1295→                <div>
+  1296→                  <p className="font-medium text-white">{right.title}</p>
+  1297→                  <p className="text-sm text-gray-400 mt-1">{right.desc}</p>
+  1298→                </div>
+  1299→              </CardContent>
+  1300→            </Card>
+  1301→          ))}
+  1302→        </div>
+  1303→      </section>
+  1304→
+  1305→      <p className="text-sm text-gray-500">
+  1306→        For questions about our privacy practices, contact our Data Protection Officer at{' '}
+  1307→        <span className="text-gray-400">dpo@modelvault.dev</span>.
+  1308→      </p>
+  1309→    </PageShell>
+  1310→  );
+  1311→}
+  1312→
+  1313→/* ─────────────────────────── TERMS ─────────────────────────── */
+  1314→
+  1315→function TermsPage() {
+  1316→  return (
+  1317→    <PageShell slug="terms">
+  1318→      <p className="text-gray-300 leading-relaxed mb-4">
+  1319→        These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of ModelVault&apos;s platform,
+  1320→        website, API, CLI tools, and related services (collectively, the &ldquo;Service&rdquo;). By accessing or
+  1321→        using the Service, you agree to be bound by these Terms. If you are using the Service on behalf of an
+  1322→        organization, you represent that you have the authority to bind that organization to these Terms.
+  1323→      </p>
+  1324→      <p className="text-gray-300 leading-relaxed mb-10">
+  1325→        These Terms were last updated on June 1, 2025. We may update these Terms from time to time. Material
+  1326→        changes will be communicated via email and in-app notification at least 30 days before taking effect.
+  1327→        Your continued use of the Service after the effective date constitutes acceptance of the updated Terms.
+  1328→      </p>
+  1329→
+  1330→      <div className="space-y-8">
+  1331→        {[
+  1332→          {
+  1333→            title: '1. Account Registration and Security',
+  1334→            content:
+  1335→              'You must provide accurate and complete information when creating your account. You are responsible for maintaining the confidentiality of your login credentials and for all activities that occur under your account. You must notify us immediately of any unauthorized use of your account. ModelVault supports multi-factor authentication and we strongly recommend enabling it for all accounts. Enterprise customers may enforce MFA organization-wide through administrative controls.',
+  1336→          },
+  1337→          {
+  1338→            title: '2. Acceptable Use',
+  1339→            content:
+  1340→              'You agree not to use the Service for any unlawful purpose, to distribute malware through model artifacts, to circumvent access controls or rate limits, or to attempt to gain unauthorized access to other users\' accounts or data. You retain full ownership and responsibility for the model artifacts you upload. ModelVault does not claim any intellectual property rights over your models. However, by using the Service, you grant us a limited license to process, scan, and store your artifacts solely for the purpose of providing the Service.',
+  1341→          },
+  1342→          {
+  1343→            title: '3. Service Availability and SLA',
+  1344→            content:
+  1345→              'We strive to maintain high availability of the Service. Free and Pro plans are provided on a best-effort basis. Enterprise customers receive a Service Level Agreement guaranteeing 99.99% monthly uptime, with service credits provided for any downtime exceeding the committed threshold. Scheduled maintenance windows are communicated at least 72 hours in advance and do not count against SLA calculations.',
+  1346→          },
+  1347→          {
+  1348→            title: '4. Payment and Billing',
+  1349→            content:
+  1350→              'Pro plans are billed monthly or annually in advance. Enterprise plans are billed according to custom contract terms. All fees are non-refundable except as required by applicable law or as specified in your Enterprise agreement. We reserve the right to change pricing with 60 days\' advance notice. Taxes are calculated based on your billing address and are the responsibility of the customer.',
+  1351→          },
+  1352→          {
+  1353→            title: '5. Limitation of Liability',
+  1354→            content:
+  1355→              'To the maximum extent permitted by law, ModelVault and its officers, directors, employees, and affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising out of or related to your use of the Service. Our total aggregate liability shall not exceed the total fees paid by you in the 12 months preceding the claim. This limitation applies regardless of the legal theory on which the claim is based.',
+  1356→          },
+  1357→          {
+  1358→            title: '6. Termination',
+  1359→            content:
+  1360→              'You may terminate your account at any time through the dashboard settings or by contacting support. ModelVault reserves the right to suspend or terminate accounts that violate these Terms, engage in abusive behavior, or pose a security risk to the platform. Upon termination, you have 30 days to export your data. After this period, all data associated with your account will be permanently deleted in accordance with our data retention policy.',
+  1361→          },
+  1362→        ].map((section) => (
+  1363→          <section key={section.title}>
+  1364→            <h2 className="text-lg font-semibold text-white mb-3">{section.title}</h2>
+  1365→            <p className="text-gray-300 leading-relaxed">{section.content}</p>
+  1366→          </section>
+  1367→        ))}
+  1368→      </div>
+  1369→    </PageShell>
+  1370→  );
+  1371→}
+  1372→
+  1373→/* ─────────────────────────── PRIVACY POLICY ─────────────────────────── */
+  1374→
+  1375→function PrivacyPolicyPage() {
+  1376→  return (
+  1377→    <PageShell slug="privacy-policy">
+  1378→      <p className="text-gray-300 leading-relaxed mb-4">
+  1379→        ModelVault, Inc. (&ldquo;ModelVault,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;)
+  1380→        is committed to protecting the privacy and security of personal data. This Privacy Policy explains how we
+  1381→        collect, use, disclose, and safeguard your information when you use our website, platform, API, and related
+  1382→        services. This policy applies to all users of our Service, including free tier users, paid subscribers,
+  1383→        and enterprise customers.
+  1384→      </p>
+  1385→      <p className="text-gray-300 leading-relaxed mb-10">
+  1386→        This Privacy Policy is effective as of June 1, 2025. We comply with the General Data Protection Regulation
+  1387→        (GDPR), the California Consumer Privacy Act (CCPA), and other applicable data protection laws. Our Data
+  1388→        Protection Officer can be reached at dpo@modelvault.dev.
+  1389→      </p>
+  1390→
+  1391→      <div className="space-y-8">
+  1392→        <section>
+  1393→          <h2 className="text-lg font-semibold text-white mb-3">1. Information We Collect</h2>
+  1394→          <p className="text-gray-300 leading-relaxed mb-3">
+  1395→            We collect the following categories of personal data:
+  1396→          </p>
+  1397→          <ul className="space-y-2 mb-3">
+  1398→            <li className="flex items-start gap-2 text-sm text-gray-300">
+  1399→              <CircleDot className="h-4 w-4 text-[#667eea] mt-0.5 shrink-0" />
+  1400→              <span><strong className="text-gray-200">Account Data:</strong> Name, email address, organization name, job title, and authentication credentials (hashed and salted using bcrypt).</span>
+  1401→            </li>
+  1402→            <li className="flex items-start gap-2 text-sm text-gray-300">
+  1403→              <CircleDot className="h-4 w-4 text-[#667eea] mt-0.5 shrink-0" />
+  1404→              <span><strong className="text-gray-200">Usage Data:</strong> API request logs (anonymized), feature usage patterns, dashboard interaction events, and error reports. IP addresses are logged for security purposes and retained for 90 days.</span>
+  1405→            </li>
+  1406→            <li className="flex items-start gap-2 text-sm text-gray-300">
+  1407→              <CircleDot className="h-4 w-4 text-[#667eea] mt-0.5 shrink-0" />
+  1408→              <span><strong className="text-gray-200">Model Artifact Metadata:</strong> Model names, version tags, SBOM contents, scan results, and signing certificates. The actual model weight files are encrypted at rest and are not inspected beyond the scope of requested services.</span>
+  1409→            </li>
+  1410→            <li className="flex items-start gap-2 text-sm text-gray-300">
+  1411→              <CircleDot className="h-4 w-4 text-[#667eea] mt-0.5 shrink-0" />
+  1412→              <span><strong className="text-gray-200">Payment Data:</strong> Billing address and transaction history. Credit card numbers are processed by Stripe and never stored on our servers.</span>
+  1413→            </li>
+  1414→          </ul>
+  1415→        </section>
+  1416→
+  1417→        <section>
+  1418→          <h2 className="text-lg font-semibold text-white mb-3">2. How We Use Your Data</h2>
+  1419→          <p className="text-gray-300 leading-relaxed">
+  1420→            We use your personal data to provide, maintain, and improve the Service; process transactions and send related billing information; send technical notices, updates, security alerts, and administrative messages; respond to your inquiries and provide customer support; monitor and analyze trends, usage, and activities in connection with the Service; detect, investigate, and prevent security incidents and fraud; and comply with legal obligations. We do not use your data for targeted advertising, and we do not build advertising profiles.
+  1421→          </p>
+  1422→        </section>
+  1423→
+  1424→        <section>
+  1425→          <h2 className="text-lg font-semibold text-white mb-3">3. Data Sharing and Disclosure</h2>
+  1426→          <p className="text-gray-300 leading-relaxed mb-3">
+  1427→            We do not sell your personal data. We share data only with the following categories of recipients:
+  1428→          </p>
+  1429→          <ul className="space-y-2 mb-3">
+  1430→            <li className="flex items-start gap-2 text-sm text-gray-300">
+  1431→              <CircleDot className="h-4 w-4 text-[#667eea] mt-0.5 shrink-0" />
+  1432→              <span><strong className="text-gray-200">Service Providers:</strong> Cloud infrastructure (AWS, GCP), payment processing (Stripe), authentication (Auth0), and email delivery (Resend). All providers are bound by data processing agreements.</span>
+  1433→            </li>
+  1434→            <li className="flex items-start gap-2 text-sm text-gray-300">
+  1435→              <CircleDot className="h-4 w-4 text-[#667eea] mt-0.5 shrink-0" />
+  1436→              <span><strong className="text-gray-200">Legal Requirements:</strong> We may disclose data when required by law, court order, or governmental regulation. We will notify affected users unless prohibited by law.</span>
+  1437→            </li>
+  1438→            <li className="flex items-start gap-2 text-sm text-gray-300">
+  1439→              <CircleDot className="h-4 w-4 text-[#667eea] mt-0.5 shrink-0" />
+  1440→              <span><strong className="text-gray-200">Security Researchers:</strong> Anonymized, aggregated data may be shared with our bug bounty program for vulnerability research purposes.</span>
+  1441→            </li>
+  1442→          </ul>
+  1443→        </section>
+  1444→
+  1445→        <section>
+  1446→          <h2 className="text-lg font-semibold text-white mb-3">4. Data Retention</h2>
+  1447→          <p className="text-gray-300 leading-relaxed">
+  1448→            We retain personal data for as long as your account is active or as needed to provide the Service. Upon account deletion, personal data is purged within 30 days. Audit logs are retained according to your plan tier: 7 days (Free), 90 days (Pro), and unlimited (Enterprise). Model artifacts are retained until manually deleted or until the end of the retention period specified in your organization settings. Encrypted backups are retained for 90 days and then securely destroyed.
+  1449→          </p>
+  1450→        </section>
+  1451→
+  1452→        <section>
+  1453→          <h2 className="text-lg font-semibold text-white mb-3">5. Data Security Measures</h2>
+  1454→          <p className="text-gray-300 leading-relaxed">
+  1455→            We implement industry-standard security measures including AES-256-GCM encryption at rest, TLS 1.3 encryption in transit, tenant-isolated VPC deployments, regular penetration testing by third-party firms, SOC 2 Type II certified controls, and a full-time security engineering team. Access to customer data is restricted via role-based access control and is logged and audited. All employees undergo annual security training and background checks.
+  1456→          </p>
+  1457→        </section>
+  1458→
+  1459→        <section>
+  1460→          <h2 className="text-lg font-semibold text-white mb-3">6. Your Rights Under GDPR and CCPA</h2>
+  1461→          <p className="text-gray-300 leading-relaxed">
+  1462→            Depending on your jurisdiction, you have the right to access, rectify, port, and delete your personal data; withdraw consent at any time; object to processing; and request restriction of processing. To exercise these rights, contact dpo@modelvault.dev or use the Privacy Controls section in your account dashboard. We respond to all data subject requests within 30 days. Under CCPA, California residents may also request information about data sold (none) and opt out of the sale of personal information (not applicable).
+  1463→          </p>
+  1464→        </section>
+  1465→      </div>
+  1466→    </PageShell>
+  1467→  );
+  1468→}
+  1469→
+  1470→/* ─────────────────────────── SECURITY POLICY ─────────────────────────── */
+  1471→
+  1472→function SecurityPolicyPage() {
+  1473→  return (
+  1474→    <PageShell slug="security-policy">
+  1475→      <p className="text-gray-300 leading-relaxed mb-4">
+  1476→        Security is at the core of everything we build at ModelVault. As a platform that organizations trust to
+  1477→        protect their most valuable AI intellectual property, we hold ourselves to the highest security standards.
+  1478→        This document outlines our security architecture, vulnerability management practices, and how to report
+  1479→        security issues to our team.
+  1480→      </p>
+  1481→      <p className="text-gray-300 leading-relaxed mb-10">
+  1482→        Our security program is overseen by our VP of Security and reviewed quarterly by our Board of Directors.
+  1483→        We maintain SOC 2 Type II certification, ISO 27001:2022 certification, and are actively pursuing FedRAMP
+  1484→        Moderate authorization.
+  1485→      </p>
+  1486→
+  1487→      <section className="mb-10">
+  1488→        <h2 className="text-2xl font-bold text-white mb-4">Security Architecture</h2>
+  1489→        <p className="text-gray-300 leading-relaxed mb-4">
+  1490→          ModelVault is built on a zero-trust architecture where every request is authenticated, authorized, and
+  1491→          encrypted — regardless of network location. Our infrastructure runs on dedicated, tenant-isolated VPCs
+  1492→          within AWS and GCP. Customer data never crosses tenant boundaries, and compute workloads (including
+  1493→          sandbox analysis) run in hardware-isolated environments using gVisor and Firecracker microVMs.
+  1494→        </p>
+  1495→        <div className="grid gap-4 sm:grid-cols-2">
+  1496→          {[
+  1497→            { icon: <Lock className="h-5 w-5 text-[#667eea]" />, title: 'Encryption', desc: 'AES-256-GCM at rest, TLS 1.3 in transit. Customer-managed encryption keys (CMK) available for Enterprise plans. Key rotation every 90 days.' },
+  1498→            { icon: <ShieldCheck className="h-5 w-5 text-[#667eea]" />, title: 'Access Control', desc: 'RBAC with OIDC/SAML SSO. All access logged. Privileged access requires MFA and is time-limited via just-in-time provisioning.' },
+  1499→            { icon: <Server className="h-5 w-5 text-[#667eea]" />, title: 'Infrastructure', desc: 'Tenant-isolated VPCs. No shared compute between customers. Infrastructure-as-code with automated drift detection.' },
+  1500→            { icon: <Activity className="h-5 w-5 text-[#667eea]" />, title: 'Monitoring', desc: '24/7 SOC monitoring. Automated anomaly detection on API traffic. Real-time alerting for security events via PagerDuty.' },
+  1501→          ].map((item) => (
+  1502→            <Card key={item.title} className="bg-[#111827] border-gray-800">
+  1503→              <CardContent className="flex items-start gap-4 py-6">
+  1504→                {item.icon}
+  1505→                <div>
+  1506→                  <p className="font-medium text-white">{item.title}</p>
+  1507→                  <p className="text-sm text-gray-400 mt-1">{item.desc}</p>
+  1508→                </div>
+  1509→              </CardContent>
+  1510→            </Card>
+  1511→          ))}
+  1512→        </div>
+  1513→      </section>
+  1514→
+  1515→      <Separator className="bg-gray-800 mb-10" />
+  1516→
+  1517→      <section className="mb-10">
+  1518→        <h2 className="text-2xl font-bold text-white mb-4">Vulnerability Management</h2>
+  1519→        <p className="text-gray-300 leading-relaxed mb-4">
+  1520→          We operate a comprehensive vulnerability management program that includes automated scanning of our
+  1521→          own dependencies (using our own platform), quarterly third-party penetration tests, continuous
+  1522→          dynamic application security testing (DAST), and a public bug bounty program. Critical vulnerabilities
+  1523→          are triaged within 4 hours and patched within 24 hours. High-severity issues are resolved within 72 hours.
+  1524→        </p>
+  1525→        <p className="text-gray-300 leading-relaxed">
+  1526→          Our internal red team conducts monthly adversarial simulations targeting our production infrastructure,
+  1527→          API endpoints, and employee social engineering resistance. Findings are tracked in our vulnerability
+  1528→          management system and are subject to SLA-driven remediation timelines. All resolved vulnerabilities
+  1529→          are documented in our quarterly security review reports available to Enterprise customers.
+  1530→        </p>
+  1531→      </section>
+  1532→
+  1533→      <Separator className="bg-gray-800 mb-10" />
+  1534→
+  1535→      <section className="mb-10">
+  1536→        <h2 className="text-2xl font-bold text-white mb-4">Responsible Disclosure Policy</h2>
+  1537→        <p className="text-gray-300 leading-relaxed mb-4">
+  1538→          If you believe you have discovered a security vulnerability in ModelVault, we encourage you to report
+  1539→          it to us responsibly. We commit to working with you in good faith to understand and resolve the issue
+  1540→          promptly.
+  1541→        </p>
+  1542→        <div className="space-y-3">
+  1543→          {[
+  1544→            'Report vulnerabilities to security@modelvault.dev or through our HackerOne program.',
+  1545→            'Provide sufficient detail for us to reproduce and validate the issue.',
+  1546→            'Do not access, modify, or delete other users\' data.',
+  1547→            'Allow us reasonable time to respond and remediate before public disclosure.',
+  1548→            'Do not engage in denial-of-service attacks or degrade service availability.',
+  1549→          ].map((item, i) => (
+  1550→            <div key={i} className="flex items-start gap-2 text-sm text-gray-300">
+  1551→              <span className="text-[#667eea] font-bold shrink-0">{i + 1}.</span>
+  1552→              {item}
+  1553→            </div>
+  1554→          ))}
+  1555→        </div>
+  1556→        <p className="text-sm text-gray-400 mt-4">
+  1557→          We acknowledge all reports within 24 hours and provide a detailed response within 7 business days.
+  1558→          We do not pursue legal action against researchers who follow this policy in good faith.
+  1559→        </p>
+  1560→      </section>
+  1561→
+  1562→      <Card className="bg-[#111827] border-gray-800">
+  1563→        <CardContent className="py-6">
+  1564→          <div className="flex items-center gap-3 mb-2">
+  1565→            <ShieldCheck className="h-6 w-6 text-emerald-500" />
+  1566→            <h3 className="text-lg font-semibold text-white">Have a Security Concern?</h3>
+  1567→          </div>
+  1568→          <p className="text-sm text-gray-400">
+  1569→            For urgent security issues, email <span className="text-gray-200">security@modelvault.dev</span>.
+  1570→            PGP key fingerprint: <code className="text-[#667eea] bg-[#667eea]/10 px-1.5 py-0.5 rounded text-xs">4A2B 8C3D EF01 2345 6789 AB CD EF 01 23 45 67 89 AB CD EF</code>
+  1571→          </p>
+  1572→        </CardContent>
+  1573→      </Card>
+  1574→    </PageShell>
+  1575→  );
+  1576→}
+  1577→
+  1578→/* ─────────────────────────── MAIN COMPONENT ─────────────────────────── */
+  1579→
+  1580→export default function InfoPage() {
+  1581→  const { infoSlug } = useAppStore();
+  1582→
+  1583→  if (!infoSlug) return null;
+  1584→
+  1585→  const pages: Record<InfoSlug, React.ReactNode> = {
+  1586→    features: <FeaturesPage />,
+  1587→    pricing: <PricingPage />,
+  1588→    documentation: <DocumentationPage />,
+  1589→    status: <StatusPage />,
+  1590→    about: <AboutPage />,
+  1591→    blog: <BlogPage />,
+  1592→    careers: <CareersPage />,
+  1593→    contact: <ContactPage />,
+  1594→    whitepaper: <WhitepaperPage />,
+  1595→    compliance: <CompliancePage />,
+  1596→    'bug-bounty': <BugBountyPage />,
+  1597→    privacy: <PrivacyPage />,
+  1598→    terms: <TermsPage />,
+  1599→    'privacy-policy': <PrivacyPolicyPage />,
+  1600→    'security-policy': <SecurityPolicyPage />,
+  1601→  };
+  1602→
+  1603→  return <>{pages[infoSlug]}</>;
+  1604→}

@@ -1,0 +1,1074 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import { useAppStore } from '@/lib/store';
+     5→import { useToast } from '@/hooks/use-toast';
+     6→import {
+     7→  Table,
+     8→  TableHeader,
+     9→  TableRow,
+    10→  TableHead,
+    11→  TableBody,
+    12→  TableCell,
+    13→} from '@/components/ui/table';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Button } from '@/components/ui/button';
+    16→import {
+    17→  Dialog,
+    18→  DialogContent,
+    19→  DialogHeader,
+    20→  DialogTitle,
+    21→  DialogDescription,
+    22→} from '@/components/ui/dialog';
+    23→import {
+    24→  Tabs,
+    25→  TabsList,
+    26→  TabsTrigger,
+    27→  TabsContent,
+    28→} from '@/components/ui/tabs';
+    29→import {
+    30→  Accordion,
+    31→  AccordionItem,
+    32→  AccordionTrigger,
+    33→  AccordionContent,
+    34→} from '@/components/ui/accordion';
+    35→import { Separator } from '@/components/ui/separator';
+    36→import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+    37→import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+    38→import { Skeleton } from '@/components/ui/skeleton';
+    39→import {
+    40→  ArrowLeft,
+    41→  Copy,
+    42→  Check,
+    43→  Download,
+    44→  ExternalLink,
+    45→  Clock,
+    46→  Play,
+    47→  XCircle,
+    48→  CheckCircle2,
+    49→  Shield,
+    50→  ScanLine,
+    51→  Box,
+    52→  Trash2,
+    53→  Eye,
+    54→  FileText,
+    55→} from 'lucide-react';
+    56→import { formatDistanceToNow } from 'date-fns';
+    57→
+    58→// ── Types ─────────────────────────────────────────────────────────────────────
+    59→
+    60→interface VersionSignature {
+    61→  id: string;
+    62→  signerEmail: string;
+    63→  verifiedAt: string | null;
+    64→  createdAt: string;
+    65→}
+    66→
+    67→interface VersionSbom {
+    68→  id: string;
+    69→  totalDeps: number;
+    70→  criticalCount: number;
+    71→  highCount: number;
+    72→  mediumCount: number;
+    73→  lowCount: number;
+    74→  createdAt: string;
+    75→}
+    76→
+    77→interface ModelVersion {
+    78→  id: string;
+    79→  version: string;
+    80→  fileSizeBytes: number;
+    81→  sha256Hash: string;
+    82→  scanStatus: string;
+    83→  scanResultJson: string | null;
+    84→  uploadedAt: string;
+    85→  signature: VersionSignature | null;
+    86→  sbom: VersionSbom | null;
+    87→}
+    88→
+    89→interface LatestSignature {
+    90→  id: string;
+    91→  signerEmail: string;
+    92→  signerIdentity: string | null;
+    93→  verifiedAt: string | null;
+    94→  createdAt: string;
+    95→  signer: { id: string; name: string; email: string } | null;
+    96→}
+    97→
+    98→interface LatestSbom {
+    99→  id: string;
+   100→  format: string;
+   101→  totalDeps: number;
+   102→  criticalCount: number;
+   103→  highCount: number;
+   104→  mediumCount: number;
+   105→  lowCount: number;
+   106→  createdAt: string;
+   107→}
+   108→
+   109→interface SandboxJob {
+   110→  id: string;
+   111→  status: string;
+   112→  resultJson: string | null;
+   113→  durationMs: number | null;
+   114→  createdAt: string;
+   115→  startedAt: string | null;
+   116→  completedAt: string | null;
+   117→  submittedBy: { id: string; name: string; email: string } | null;
+   118→}
+   119→
+   120→interface SandboxFinding {
+   121→  probe: string;
+   122→  result: string;
+   123→  detail: string;
+   124→  severity?: string;
+   125→}
+   126→
+   127→interface ModelDetail {
+   128→  id: string;
+   129→  name: string;
+   130→  description: string | null;
+   131→  sourceUrl: string | null;
+   132→  format: string;
+   133→  status: string;
+   134→  createdAt: string;
+   135→  updatedAt: string;
+   136→  versions: ModelVersion[];
+   137→  latestSignature: LatestSignature | null;
+   138→  latestSbom: LatestSbom | null;
+   139→  latestSandboxJob: SandboxJob | null;
+   140→}
+   141→
+   142→// ── Helpers ───────────────────────────────────────────────────────────────────
+   143→
+   144→const STATUS_COLORS: Record<string, string> = {
+   145→  signed: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
+   146→  scanning: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+   147→  failed: 'bg-red-500/15 text-red-500 border-red-500/25',
+   148→  uploading: 'bg-gray-500/15 text-gray-400 border-gray-500/25',
+   149→  published: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
+   150→  quarantined: 'bg-amber-500/15 text-amber-500 border-amber-500/25',
+   151→  scanned: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+   152→};
+   153→
+   154→const SANDBOX_STATUS_COLORS: Record<string, string> = {
+   155→  queued: 'bg-gray-500/15 text-gray-400 border-gray-500/25',
+   156→  provisioning: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+   157→  running: 'bg-amber-500/15 text-amber-500 border-amber-500/25',
+   158→  completed: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
+   159→  failed: 'bg-red-500/15 text-red-500 border-red-500/25',
+   160→};
+   161→
+   162→const SEVERITY_COLORS: Record<string, string> = {
+   163→  CRITICAL: 'bg-red-500/15 text-red-500 border-red-500/25',
+   164→  HIGH: 'bg-orange-500/15 text-orange-500 border-orange-500/25',
+   165→  MEDIUM: 'bg-amber-500/15 text-amber-500 border-amber-500/25',
+   166→  LOW: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+   167→};
+   168→
+   169→function formatBytes(bytes: number): string {
+   170→  if (bytes === 0) return '0 B';
+   171→  const k = 1024;
+   172→  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+   173→  const i = Math.floor(Math.log(bytes) / Math.log(k));
+   174→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+   175→}
+   176→
+   177→function truncateHash(hash: string): string {
+   178→  if (!hash || hash.length <= 16) return hash || '—';
+   179→  return hash.slice(0, 8) + '…' + hash.slice(-8);
+   180→}
+   181→
+   182→// ── Component ─────────────────────────────────────────────────────────────────
+   183→
+   184→export default function ModelDetail() {
+   185→  const selectedModelId = useAppStore((s) => s.selectedModelId);
+   186→  const navigate = useAppStore((s) => s.navigate);
+   187→  const { toast } = useToast();
+   188→
+   189→  const [model, setModel] = useState<ModelDetail | null>(null);
+   190→  const [loading, setLoading] = useState(true);
+   191→  const [sandboxJobs, setSandboxJobs] = useState<SandboxJob[]>([]);
+   192→  const [sandboxLoading, setSandboxLoading] = useState(false);
+   193→
+   194→  // SBOM dialog
+   195→  const [sbomDialogOpen, setSbomDialogOpen] = useState(false);
+   196→
+   197→  // Copy state
+   198→  const [copiedHash, setCopiedHash] = useState<string | null>(null);
+   199→
+   200→  // Action loading states
+   201→  const [signing, setSigning] = useState(false);
+   202→  const [scanning, setScanning] = useState(false);
+   203→  const [sandboxing, setSandboxing] = useState(false);
+   204→  const [deleting, setDeleting] = useState(false);
+   205→
+   206→  // ── Fetch model ────────────────────────────────────────────────────────────
+   207→
+   208→  const fetchModel = useCallback(async () => {
+   209→    if (!selectedModelId) return;
+   210→    setLoading(true);
+   211→    try {
+   212→      const res = await fetch(`/api/models/${selectedModelId}`);
+   213→      if (!res.ok) throw new Error();
+   214→      const data = await res.json();
+   215→      setModel(data);
+   216→    } catch {
+   217→      toast({ title: 'Failed to load model', variant: 'destructive' });
+   218→    } finally {
+   219→      setLoading(false);
+   220→    }
+   221→  }, [selectedModelId, toast]);
+   222→
+   223→  const fetchSandboxJobs = useCallback(async () => {
+   224→    if (!selectedModelId) return;
+   225→    setSandboxLoading(true);
+   226→    try {
+   227→      const res = await fetch(`/api/models/${selectedModelId}/sandbox?modelId=${selectedModelId}`);
+   228→      if (!res.ok) throw new Error();
+   229→      const data = await res.json();
+   230→      setSandboxJobs(data.items ?? []);
+   231→    } catch {
+   232→      // silent
+   233→    } finally {
+   234→      setSandboxLoading(false);
+   235→    }
+   236→  }, [selectedModelId]);
+   237→
+   238→  useEffect(() => {
+   239→    fetchModel();
+   240→  }, [fetchModel]);
+   241→
+   242→  useEffect(() => {
+   243→    fetchSandboxJobs();
+   244→  }, [fetchSandboxJobs]);
+   245→
+   246→  // ── Actions ───────────────────────────────────────────────────────────────
+   247→
+   248→  const handleSign = async () => {
+   249→    if (!model) return;
+   250→    setSigning(true);
+   251→    try {
+   252→      const res = await fetch(`/api/models/${model.id}/sign`, { method: 'POST' });
+   253→      if (!res.ok) throw new Error();
+   254→      toast({ title: 'Model signed successfully' });
+   255→      fetchModel();
+   256→    } catch {
+   257→      toast({ title: 'Failed to sign model', variant: 'destructive' });
+   258→    } finally {
+   259→      setSigning(false);
+   260→    }
+   261→  };
+   262→
+   263→  const handleScan = async () => {
+   264→    if (!model) return;
+   265→    setScanning(true);
+   266→    try {
+   267→      const res = await fetch(`/api/models/${model.id}/scan`, { method: 'POST' });
+   268→      if (!res.ok) throw new Error();
+   269→      toast({ title: 'Scan started successfully' });
+   270→      fetchModel();
+   271→    } catch {
+   272→      toast({ title: 'Failed to start scan', variant: 'destructive' });
+   273→    } finally {
+   274→      setScanning(false);
+   275→    }
+   276→  };
+   277→
+   278→  const handleSandbox = async () => {
+   279→    if (!model) return;
+   280→    setSandboxing(true);
+   281→    try {
+   282→      const res = await fetch(`/api/models/${model.id}/sandbox`, { method: 'POST' });
+   283→      if (!res.ok) throw new Error();
+   284→      toast({ title: 'Sandbox job started' });
+   285→      fetchSandboxJobs();
+   286→    } catch {
+   287→      toast({ title: 'Failed to start sandbox', variant: 'destructive' });
+   288→    } finally {
+   289→      setSandboxing(false);
+   290→    }
+   291→  };
+   292→
+   293→  const handleDelete = async () => {
+   294→    if (!model) return;
+   295→    setDeleting(true);
+   296→    try {
+   297→      const res = await fetch(`/api/models/${model.id}`, { method: 'DELETE' });
+   298→      if (!res.ok) throw new Error();
+   299→      toast({ title: `"${model.name}" deleted` });
+   300→      navigate('models');
+   301→    } catch {
+   302→      toast({ title: 'Failed to delete model', variant: 'destructive' });
+   303→    } finally {
+   304→      setDeleting(false);
+   305→    }
+   306→  };
+   307→
+   308→  const copyHash = (hash: string) => {
+   309→    navigator.clipboard.writeText(hash);
+   310→    setCopiedHash(hash);
+   311→    toast({ title: 'SHA-256 hash copied' });
+   312→    setTimeout(() => setCopiedHash(null), 2000);
+   313→  };
+   314→
+   315→  // ── Build SBOM JSON for dialog ────────────────────────────────────────────
+   316→
+   317→  const buildSbomJson = (): string => {
+   318→    if (!model?.latestSbom) return '{}';
+   319→    const sbom = model.latestSbom;
+   320→    const vulns: Array<{ id: string; severity: string; description: string }> = [];
+   321→    let idx = 1000;
+   322→    for (let i = 0; i < sbom.criticalCount; i++) vulns.push({ id: `CVE-2025-${idx++}`, severity: 'CRITICAL', description: 'Critical vulnerability in dependency' });
+   323→    for (let i = 0; i < sbom.highCount; i++) vulns.push({ id: `CVE-2025-${idx++}`, severity: 'HIGH', description: 'High severity vulnerability' });
+   324→    for (let i = 0; i < sbom.mediumCount; i++) vulns.push({ id: `CVE-2025-${idx++}`, severity: 'MEDIUM', description: 'Medium severity vulnerability' });
+   325→    for (let i = 0; i < sbom.lowCount; i++) vulns.push({ id: `CVE-2025-${idx++}`, severity: 'LOW', description: 'Low severity vulnerability' });
+   326→
+   327→    const deps = ['numpy', 'torch', 'transformers', 'tokenizers', 'safetensors', 'onnx', 'pillow', 'scipy'].slice(0, Math.min(sbom.totalDeps, 8));
+   328→
+   329→    return JSON.stringify(
+   330→      {
+   331→        bomFormat: 'CycloneDX',
+   332→        specVersion: '1.5',
+   333→        metadata: {
+   334→          component: {
+   335→            name: model.name,
+   336→            version: model.versions[0]?.version ?? 'v1.0.0',
+   337→            type: 'machine-learning-model',
+   338→            properties: [
+   339→              { name: 'ml:framework', value: 'pytorch' },
+   340→              { name: 'ml:task', value: 'text-generation' },
+   341→            ],
+   342→          },
+   343→          tools: [{ name: 'modelvault-scanner', version: '1.2.0' }],
+   344→        },
+   345→        components: deps.map((d) => ({ ref: `pkg:pypi/${d}`, type: 'library' })),
+   346→        vulnerabilities: vulns,
+   347→      },
+   348→      null,
+   349→      2
+   350→    );
+   351→  };
+   352→
+   353→  // ── Loading state ─────────────────────────────────────────────────────────
+   354→
+   355→  if (loading) {
+   356→    return (
+   357→      <div className="space-y-6">
+   358→        <div className="flex items-center gap-3">
+   359→          <Skeleton className="h-9 w-9 rounded-md" />
+   360→          <Skeleton className="h-8 w-[200px]" />
+   361→        </div>
+   362→        <Skeleton className="h-6 w-[300px]" />
+   363→        <Skeleton className="h-4 w-[500px]" />
+   364→        <div className="flex gap-3">
+   365→          <Skeleton className="h-9 w-[100px]" />
+   366→          <Skeleton className="h-9 w-[100px]" />
+   367→          <Skeleton className="h-9 w-[120px]" />
+   368→          <Skeleton className="h-9 w-[100px]" />
+   369→        </div>
+   370→        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   371→          {[1, 2, 3].map((i) => (
+   372→            <Skeleton key={i} className="h-[180px] rounded-lg" />
+   373→          ))}
+   374→        </div>
+   375→      </div>
+   376→    );
+   377→  }
+   378→
+   379→  if (!model) {
+   380→    return (
+   381→      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+   382→        <XCircle className="h-12 w-12 mb-4 opacity-40" />
+   383→        <p className="text-lg font-medium">Model not found</p>
+   384→        <Button variant="outline" className="mt-4" onClick={() => navigate('models')}>
+   385→          Back to Models
+   386→        </Button>
+   387→      </div>
+   388→    );
+   389→  }
+   390→
+   391→  const sig = model.latestSignature;
+   392→  const sbom = model.latestSbom;
+   393→  const latestVersion = model.versions[0];
+   394→
+   395→  // Determine overall scan status from latest version
+   396→  const scanResultJson = latestVersion?.scanResultJson
+   397→    ? JSON.parse(latestVersion.scanResultJson)
+   398→    : null;
+   399→  const overallScanStatus = latestVersion?.scanStatus === 'completed'
+   400→    ? (scanResultJson?.critical > 0 ? 'failed' : scanResultJson?.high > 0 ? 'warning' : 'passed')
+   401→    : latestVersion?.scanStatus ?? 'pending';
+   402→
+   403→  // ── Render ────────────────────────────────────────────────────────────────
+   404→
+   405→  return (
+   406→    <TooltipProvider>
+   407→      <div className="space-y-6">
+   408→        {/* Back + Header */}
+   409→        <div className="space-y-4">
+   410→          <Button
+   411→            variant="ghost"
+   412→            size="sm"
+   413→            className="gap-2 -ml-2 text-muted-foreground hover:text-foreground"
+   414→            onClick={() => navigate('models')}
+   415→          >
+   416→            <ArrowLeft className="h-4 w-4" />
+   417→            Back to Models
+   418→          </Button>
+   419→
+   420→          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+   421→            <div className="space-y-2">
+   422→              <div className="flex items-center gap-3 flex-wrap">
+   423→                <h1 className="text-2xl font-bold tracking-tight">{model.name}</h1>
+   424→                <Badge variant="outline" className="text-xs font-normal">{model.format}</Badge>
+   425→                <Badge
+   426→                  variant="outline"
+   427→                  className={STATUS_COLORS[model.status] ?? 'text-muted-foreground'}
+   428→                >
+   429→                  {model.status.charAt(0).toUpperCase() + model.status.slice(1)}
+   430→                </Badge>
+   431→              </div>
+   432→              {model.description && (
+   433→                <p className="text-sm text-muted-foreground max-w-2xl">{model.description}</p>
+   434→              )}
+   435→              {model.sourceUrl && (
+   436→                <a
+   437→                  href={model.sourceUrl}
+   438→                  target="_blank"
+   439→                  rel="noopener noreferrer"
+   440→                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+   441→                >
+   442→                  <ExternalLink className="h-3.5 w-3.5" />
+   443→                  {model.sourceUrl}
+   444→                </a>
+   445→              )}
+   446→            </div>
+   447→
+   448→            <div className="flex items-center gap-2 flex-wrap">
+   449→              <Button
+   450→                variant="outline"
+   451→                size="sm"
+   452→                onClick={handleSign}
+   453→                disabled={signing}
+   454→                className="gap-2"
+   455→              >
+   456→                {signing ? (
+   457→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   458→                ) : (
+   459→                  <Shield className="h-4 w-4" />
+   460→                )}
+   461→                Sign Model
+   462→              </Button>
+   463→              <Button
+   464→                variant="outline"
+   465→                size="sm"
+   466→                onClick={handleScan}
+   467→                disabled={scanning}
+   468→                className="gap-2"
+   469→              >
+   470→                {scanning ? (
+   471→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   472→                ) : (
+   473→                  <ScanLine className="h-4 w-4" />
+   474→                )}
+   475→                Run Scan
+   476→              </Button>
+   477→              <Button
+   478→                variant="outline"
+   479→                size="sm"
+   480→                onClick={handleSandbox}
+   481→                disabled={sandboxing}
+   482→                className="gap-2"
+   483→              >
+   484→                {sandboxing ? (
+   485→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   486→                ) : (
+   487→                  <Box className="h-4 w-4" />
+   488→                )}
+   489→                Start Sandbox
+   490→              </Button>
+   491→              <Button
+   492→                variant="outline"
+   493→                size="sm"
+   494→                onClick={handleDelete}
+   495→                disabled={deleting}
+   496→                className="gap-2 text-red-500 hover:text-red-500"
+   497→              >
+   498→                {deleting ? (
+   499→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   500→                ) : (
+   501→                  <Trash2 className="h-4 w-4" />
+   502→                )}
+   503→                Delete
+   504→              </Button>
+   505→            </div>
+   506→          </div>
+   507→        </div>
+   508→
+   509→        <Separator />
+   510→
+   511→        {/* Tabs */}
+   512→        <Tabs defaultValue="overview" className="space-y-4">
+   513→          <TabsList>
+   514→            <TabsTrigger value="overview">Overview</TabsTrigger>
+   515→            <TabsTrigger value="versions">Versions ({model.versions.length})</TabsTrigger>
+   516→            <TabsTrigger value="scan-results">Scan Results</TabsTrigger>
+   517→            <TabsTrigger value="sandbox">Sandbox ({sandboxJobs.length})</TabsTrigger>
+   518→          </TabsList>
+   519→
+   520→          {/* ── Tab 1: Overview ─────────────────────────────────────────── */}
+   521→          <TabsContent value="overview" className="space-y-4">
+   522→            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   523→              {/* Signature Status Card */}
+   524→              <Card>
+   525→                <CardHeader className="pb-3">
+   526→                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+   527→                    <Shield className="h-4 w-4 text-emerald-500" />
+   528→                    Signature Status
+   529→                  </CardTitle>
+   530→                </CardHeader>
+   531→                <CardContent className="space-y-3">
+   532→                  {sig ? (
+   533→                    <>
+   534→                      <div className="flex items-center justify-between">
+   535→                        <span className="text-xs text-muted-foreground">Signer</span>
+   536→                        <span className="text-sm font-medium">{sig.signerIdentity ?? sig.signerEmail}</span>
+   537→                      </div>
+   538→                      <div className="flex items-center justify-between">
+   539→                        <span className="text-xs text-muted-foreground">Signed</span>
+   540→                        <span className="text-sm text-muted-foreground">
+   541→                          {formatDistanceToNow(new Date(sig.createdAt), { addSuffix: true })}
+   542→                        </span>
+   543→                      </div>
+   544→                      <div className="flex items-center justify-between">
+   545→                        <span className="text-xs text-muted-foreground">Verification</span>
+   546→                        <Badge
+   547→                          variant="outline"
+   548→                          className={
+   549→                            sig.verifiedAt
+   550→                              ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25'
+   551→                              : 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+   552→                          }
+   553→                        >
+   554→                          {sig.verifiedAt ? (
+   555→                            <span className="flex items-center gap-1">
+   556→                              <CheckCircle2 className="h-3 w-3" /> Verified
+   557→                            </span>
+   558→                          ) : (
+   559→                            'Unverified'
+   560→                          )}
+   561→                        </Badge>
+   562→                      </div>
+   563→                      {!sig.verifiedAt && (
+   564→                        <Button
+   565→                          variant="outline"
+   566→                          size="sm"
+   567→                          className="w-full mt-2"
+   568→                          onClick={() => toast({ title: 'Verification initiated' })}
+   569→                        >
+   570→                          Verify Now
+   571→                        </Button>
+   572→                      )}
+   573→                    </>
+   574→                  ) : (
+   575→                    <div className="text-center py-4">
+   576→                      <Shield className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+   577→                      <p className="text-sm text-muted-foreground">Not signed</p>
+   578→                    </div>
+   579→                  )}
+   580→                </CardContent>
+   581→              </Card>
+   582→
+   583→              {/* SBOM Summary Card */}
+   584→              <Card>
+   585→                <CardHeader className="pb-3">
+   586→                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+   587→                    <FileText className="h-4 w-4 text-amber-500" />
+   588→                    SBOM Summary
+   589→                  </CardTitle>
+   590→                </CardHeader>
+   591→                <CardContent className="space-y-3">
+   592→                  {sbom ? (
+   593→                    <>
+   594→                      <div className="flex items-center justify-between">
+   595→                        <span className="text-xs text-muted-foreground">Dependencies</span>
+   596→                        <span className="text-sm font-medium">{sbom.totalDeps}</span>
+   597→                      </div>
+   598→                      <Separator />
+   599→                      <div className="flex flex-wrap gap-1.5">
+   600→                        {sbom.criticalCount > 0 && (
+   601→                          <Badge variant="outline" className={SEVERITY_COLORS.CRITICAL + ' text-xs'}>
+   602→                            {sbom.criticalCount} Critical
+   603→                          </Badge>
+   604→                        )}
+   605→                        {sbom.highCount > 0 && (
+   606→                          <Badge variant="outline" className={SEVERITY_COLORS.HIGH + ' text-xs'}>
+   607→                            {sbom.highCount} High
+   608→                          </Badge>
+   609→                        )}
+   610→                        {sbom.mediumCount > 0 && (
+   611→                          <Badge variant="outline" className={SEVERITY_COLORS.MEDIUM + ' text-xs'}>
+   612→                            {sbom.mediumCount} Medium
+   613→                          </Badge>
+   614→                        )}
+   615→                        {sbom.lowCount > 0 && (
+   616→                          <Badge variant="outline" className={SEVERITY_COLORS.LOW + ' text-xs'}>
+   617→                            {sbom.lowCount} Low
+   618→                          </Badge>
+   619→                        )}
+   620→                        {sbom.criticalCount === 0 && sbom.highCount === 0 && sbom.mediumCount === 0 && sbom.lowCount === 0 && (
+   621→                          <Badge variant="outline" className="text-xs text-emerald-500">
+   622→                            No vulnerabilities
+   623→                          </Badge>
+   624→                        )}
+   625→                      </div>
+   626→                      <Button
+   627→                        variant="outline"
+   628→                        size="sm"
+   629→                        className="w-full mt-2"
+   630→                        onClick={() => setSbomDialogOpen(true)}
+   631→                      >
+   632→                        <FileText className="h-4 w-4 mr-1.5" />
+   633→                        View Full SBOM
+   634→                      </Button>
+   635→                    </>
+   636→                  ) : (
+   637→                    <div className="text-center py-4">
+   638→                      <FileText className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+   639→                      <p className="text-sm text-muted-foreground">No SBOM generated</p>
+   640→                      <Button
+   641→                        variant="outline"
+   642→                        size="sm"
+   643→                        className="mt-2"
+   644→                        onClick={handleScan}
+   645→                        disabled={scanning}
+   646→                      >
+   647→                        Run Scan
+   648→                      </Button>
+   649→                    </div>
+   650→                  )}
+   651→                </CardContent>
+   652→              </Card>
+   653→
+   654→              {/* Latest Scan Result Card */}
+   655→              <Card>
+   656→                <CardHeader className="pb-3">
+   657→                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+   658→                    <ScanLine className="h-4 w-4 text-sky-500" />
+   659→                    Latest Scan Result
+   660→                  </CardTitle>
+   661→                </CardHeader>
+   662→                <CardContent className="space-y-3">
+   663→                  {latestVersion ? (
+   664→                    <>
+   665→                      <div className="flex items-center justify-between">
+   666→                        <span className="text-xs text-muted-foreground">Status</span>
+   667→                        <Badge
+   668→                          variant="outline"
+   669→                          className={
+   670→                            overallScanStatus === 'passed'
+   671→                              ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25'
+   672→                              : overallScanStatus === 'failed'
+   673→                                ? 'bg-red-500/15 text-red-500 border-red-500/25'
+   674→                                : overallScanStatus === 'warning'
+   675→                                  ? 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+   676→                                  : 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+   677→                          }
+   678→                        >
+   679→                          {overallScanStatus.charAt(0).toUpperCase() + overallScanStatus.slice(1)}
+   680→                        </Badge>
+   681→                      </div>
+   682→                      <div className="flex items-center justify-between">
+   683→                        <span className="text-xs text-muted-foreground">Version</span>
+   684→                        <span className="text-sm">{latestVersion.version}</span>
+   685→                      </div>
+   686→                      <div className="flex items-center justify-between">
+   687→                        <span className="text-xs text-muted-foreground">Scanned</span>
+   688→                        <span className="text-sm text-muted-foreground">
+   689→                          {formatDistanceToNow(new Date(latestVersion.uploadedAt), { addSuffix: true })}
+   690→                        </span>
+   691→                      </div>
+   692→                      <Button
+   693→                        variant="outline"
+   694→                        size="sm"
+   695→                        className="w-full mt-2"
+   696→                        onClick={() => {
+   697→                          const tabsEl = document.querySelector('[value="scan-results"]') as HTMLElement;
+   698→                          tabsEl?.click();
+   699→                        }}
+   700→                      >
+   701→                        <Eye className="h-4 w-4 mr-1.5" />
+   702→                        View Scan Results
+   703→                      </Button>
+   704→                    </>
+   705→                  ) : (
+   706→                    <div className="text-center py-4">
+   707→                      <ScanLine className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+   708→                      <p className="text-sm text-muted-foreground">No scans available</p>
+   709→                    </div>
+   710→                  )}
+   711→                </CardContent>
+   712→              </Card>
+   713→            </div>
+   714→          </TabsContent>
+   715→
+   716→          {/* ── Tab 2: Versions ─────────────────────────────────────────── */}
+   717→          <TabsContent value="versions">
+   718→            <div className="rounded-lg border bg-card overflow-hidden">
+   719→              <div className="overflow-x-auto">
+   720→                <Table>
+   721→                  <TableHeader>
+   722→                    <TableRow className="border-border hover:bg-transparent">
+   723→                      <TableHead>Version</TableHead>
+   724→                      <TableHead>File Size</TableHead>
+   725→                      <TableHead>SHA-256</TableHead>
+   726→                      <TableHead>Upload Date</TableHead>
+   727→                      <TableHead>Signature</TableHead>
+   728→                      <TableHead>Actions</TableHead>
+   729→                    </TableRow>
+   730→                  </TableHeader>
+   731→                  <TableBody>
+   732→                    {model.versions.length === 0 ? (
+   733→                      <TableRow>
+   734→                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+   735→                          No versions available
+   736→                        </TableCell>
+   737→                      </TableRow>
+   738→                    ) : (
+   739→                      model.versions.map((v) => (
+   740→                        <TableRow key={v.id} className="border-border hover:bg-muted/40 transition-colors">
+   741→                          <TableCell className="font-medium font-mono text-sm">
+   742→                            {v.version}
+   743→                          </TableCell>
+   744→                          <TableCell className="text-sm text-muted-foreground">
+   745→                            {v.fileSizeBytes > 0 ? formatBytes(v.fileSizeBytes) : '—'}
+   746→                          </TableCell>
+   747→                          <TableCell>
+   748→                            <div className="flex items-center gap-1.5">
+   749→                              <code className="text-xs text-muted-foreground font-mono">
+   750→                                {truncateHash(v.sha256Hash)}
+   751→                              </code>
+   752→                              {v.sha256Hash && (
+   753→                                <Tooltip>
+   754→                                  <TooltipTrigger asChild>
+   755→                                    <button
+   756→                                      onClick={() => copyHash(v.sha256Hash)}
+   757→                                      className="text-muted-foreground hover:text-foreground transition-colors"
+   758→                                    >
+   759→                                      {copiedHash === v.sha256Hash ? (
+   760→                                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+   761→                                      ) : (
+   762→                                        <Copy className="h-3.5 w-3.5" />
+   763→                                      )}
+   764→                                    </button>
+   765→                                  </TooltipTrigger>
+   766→                                  <TooltipContent>Copy hash</TooltipContent>
+   767→                                </Tooltip>
+   768→                              )}
+   769→                            </div>
+   770→                          </TableCell>
+   771→                          <TableCell className="text-sm text-muted-foreground">
+   772→                            {formatDistanceToNow(new Date(v.uploadedAt), { addSuffix: true })}
+   773→                          </TableCell>
+   774→                          <TableCell>
+   775→                            {v.signature ? (
+   776→                              <Badge
+   777→                                variant="outline"
+   778→                                className="bg-emerald-500/15 text-emerald-500 border-emerald-500/25"
+   779→                              >
+   780→                                Signed
+   781→                              </Badge>
+   782→                            ) : (
+   783→                              <Badge variant="outline" className="text-muted-foreground text-xs">
+   784→                                Unsigned
+   785→                              </Badge>
+   786→                            )}
+   787→                          </TableCell>
+   788→                          <TableCell>
+   789→                            <div className="flex items-center gap-1">
+   790→                              <Tooltip>
+   791→                                <TooltipTrigger asChild>
+   792→                                  <Button
+   793→                                    variant="ghost"
+   794→                                    size="icon"
+   795→                                    className="h-8 w-8"
+   796→                                    onClick={() =>
+   797→                                      toast({ title: 'Download started for ' + v.version })
+   798→                                    }
+   799→                                  >
+   800→                                    <Download className="h-4 w-4" />
+   801→                                  </Button>
+   802→                                </TooltipTrigger>
+   803→                                <TooltipContent>Download</TooltipContent>
+   804→                              </Tooltip>
+   805→                              {v.signature && (
+   806→                                <Tooltip>
+   807→                                  <TooltipTrigger asChild>
+   808→                                    <Button
+   809→                                      variant="ghost"
+   810→                                      size="icon"
+   811→                                      className="h-8 w-8"
+   812→                                      onClick={() => toast({ title: 'Verification initiated' })}
+   813→                                    >
+   814→                                      <Shield className="h-4 w-4" />
+   815→                                    </Button>
+   816→                                  </TooltipTrigger>
+   817→                                  <TooltipContent>Verify</TooltipContent>
+   818→                                </Tooltip>
+   819→                              )}
+   820→                            </div>
+   821→                          </TableCell>
+   822→                        </TableRow>
+   823→                      ))
+   824→                    )}
+   825→                  </TableBody>
+   826→                </Table>
+   827→              </div>
+   828→            </div>
+   829→          </TabsContent>
+   830→
+   831→          {/* ── Tab 3: Scan Results ─────────────────────────────────────── */}
+   832→          <TabsContent value="scan-results">
+   833→            {model.versions.filter((v) => v.scanResultJson).length === 0 ? (
+   834→              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+   835→                <ScanLine className="h-12 w-12 mb-4 opacity-40" />
+   836→                <p className="text-lg font-medium">No scan results yet</p>
+   837→                <p className="text-sm mt-1">Run a scan to generate SBOM and vulnerability reports</p>
+   838→                <Button className="mt-4 gap-2" onClick={handleScan} disabled={scanning}>
+   839→                  {scanning ? (
+   840→                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   841→                  ) : (
+   842→                    <ScanLine className="h-4 w-4" />
+   843→                  )}
+   844→                  Run Scan
+   845→                </Button>
+   846→              </div>
+   847→            ) : (
+   848→              <Accordion type="multiple" className="space-y-2">
+   849→                {model.versions
+   850→                  .filter((v) => v.scanResultJson)
+   851→                  .map((v) => {
+   852→                    let parsed: Record<string, unknown> | null = null;
+   853→                    try {
+   854→                      parsed = JSON.parse(v.scanResultJson!);
+   855→                    } catch {
+   856→                      // ignore
+   857→                    }
+   858→                    const statusColor =
+   859→                      (parsed?.critical as number) > 0
+   860→                        ? 'bg-red-500/15 text-red-500 border-red-500/25'
+   861→                        : (parsed?.high as number) > 0
+   862→                          ? 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+   863→                          : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25';
+   864→                    const statusLabel =
+   865→                      (parsed?.critical as number) > 0
+   866→                        ? 'Failed'
+   867→                        : (parsed?.high as number) > 0
+   868→                          ? 'Warning'
+   869→                          : 'Passed';
+   870→
+   871→                    return (
+   872→                      <AccordionItem
+   873→                        key={v.id}
+   874→                        value={v.id}
+   875→                        className="rounded-lg border bg-card px-4 data-[state=open]:border-primary/30"
+   876→                      >
+   877→                        <AccordionTrigger className="hover:no-underline py-4">
+   878→                          <div className="flex items-center gap-3">
+   879→                            <span className="font-mono text-sm font-medium">{v.version}</span>
+   880→                            <Badge variant="outline" className={statusColor}>
+   881→                              {statusLabel}
+   882→                            </Badge>
+   883→                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+   884→                              <Clock className="h-3 w-3" />
+   885→                              {formatDistanceToNow(new Date(v.uploadedAt), { addSuffix: true })}
+   886→                            </span>
+   887→                          </div>
+   888→                        </AccordionTrigger>
+   889→                        <AccordionContent className="pb-4">
+   890→                          <div className="rounded-md bg-muted/50 p-4 overflow-x-auto max-h-96 overflow-y-auto custom-scrollbar">
+   891→                            <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-words">
+   892→                              <code>{JSON.stringify(parsed, null, 2)}</code>
+   893→                            </pre>
+   894→                          </div>
+   895→                        </AccordionContent>
+   896→                      </AccordionItem>
+   897→                    );
+   898→                  })}
+   899→              </Accordion>
+   900→            )}
+   901→          </TabsContent>
+   902→
+   903→          {/* ── Tab 4: Sandbox ──────────────────────────────────────────── */}
+   904→          <TabsContent value="sandbox">
+   905→            {sandboxLoading ? (
+   906→              <div className="space-y-3">
+   907→                {[1, 2, 3].map((i) => (
+   908→                  <Skeleton key={i} className="h-16 rounded-lg" />
+   909→                ))}
+   910→              </div>
+   911→            ) : sandboxJobs.length === 0 ? (
+   912→              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+   913→                <Box className="h-12 w-12 mb-4 opacity-40" />
+   914→                <p className="text-lg font-medium">No sandbox jobs yet</p>
+   915→                <p className="text-sm mt-1">Start a sandbox to test model behavior in isolation</p>
+   916→                <Button className="mt-4 gap-2" onClick={handleSandbox} disabled={sandboxing}>
+   917→                  {sandboxing ? (
+   918→                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   919→                  ) : (
+   920→                    <Play className="h-4 w-4" />
+   921→                  )}
+   922→                  Start Sandbox
+   923→                </Button>
+   924→              </div>
+   925→            ) : (
+   926→              <Accordion type="multiple" className="space-y-2">
+   927→                {sandboxJobs.map((job) => {
+   928→                  let findings: SandboxFinding[] = [];
+   929→                  if (job.resultJson) {
+   930→                    try {
+   931→                      const parsed = JSON.parse(job.resultJson);
+   932→                      findings = parsed.findings ?? [];
+   933→                    } catch {
+   934→                      // ignore
+   935→                    }
+   936→                  }
+   937→
+   938→                  return (
+   939→                    <AccordionItem
+   940→                      key={job.id}
+   941→                      value={job.id}
+   942→                      className="rounded-lg border bg-card px-4 data-[state=open]:border-primary/30"
+   943→                    >
+   944→                      <AccordionTrigger className="hover:no-underline py-4">
+   945→                        <div className="flex items-center gap-3 flex-wrap">
+   946→                          <Badge
+   947→                            variant="outline"
+   948→                            className={SANDBOX_STATUS_COLORS[job.status] ?? 'text-muted-foreground'}
+   949→                          >
+   950→                            {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+   951→                          </Badge>
+   952→                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+   953→                            <Clock className="h-3 w-3" />
+   954→                            {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}
+   955→                          </span>
+   956→                          {job.durationMs != null && (
+   957→                            <span className="text-xs text-muted-foreground">
+   958→                              {Math.round(job.durationMs / 1000)}s
+   959→                            </span>
+   960→                          )}
+   961→                          {job.submittedBy && (
+   962→                            <span className="text-xs text-muted-foreground">
+   963→                              by {job.submittedBy.name}
+   964→                            </span>
+   965→                          )}
+   966→                        </div>
+   967→                      </AccordionTrigger>
+   968→                      <AccordionContent className="pb-4">
+   969→                        {findings.length === 0 ? (
+   970→                          <p className="text-sm text-muted-foreground">
+   971→                            No results available{' '}
+   972→                            {job.status === 'running' && '(job still in progress)'}
+   973→                          </p>
+   974→                        ) : (
+   975→                          <div className="rounded-lg border overflow-hidden">
+   976→                            <Table>
+   977→                              <TableHeader>
+   978→                                <TableRow className="border-border hover:bg-transparent">
+   979→                                  <TableHead>Test</TableHead>
+   980→                                  <TableHead className="w-[80px]">Result</TableHead>
+   981→                                  <TableHead className="w-[90px]">Severity</TableHead>
+   982→                                  <TableHead className="min-w-[200px]">Description</TableHead>
+   983→                                  <TableHead>Evidence</TableHead>
+   984→                                </TableRow>
+   985→                              </TableHeader>
+   986→                              <TableBody>
+   987→                                {findings.map((f, i) => {
+   988→                                  const severity =
+   989→                                    f.result === 'failed' ? 'HIGH' : f.result === 'warning' ? 'MEDIUM' : 'LOW';
+   990→                                  return (
+   991→                                    <TableRow
+   992→                                      key={i}
+   993→                                      className="border-border hover:bg-muted/40 transition-colors"
+   994→                                    >
+   995→                                      <TableCell className="font-mono text-sm">
+   996→                                        {f.probe}
+   997→                                      </TableCell>
+   998→                                      <TableCell>
+   999→                                        <Badge
+  1000→                                          variant="outline"
+  1001→                                          className={
+  1002→                                            f.result === 'ok'
+  1003→                                              ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25'
+  1004→                                              : f.result === 'warning'
+  1005→                                                ? 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+  1006→                                                : 'bg-red-500/15 text-red-500 border-red-500/25'
+  1007→                                          }
+  1008→                                        >
+  1009→                                          {f.result === 'ok' ? (
+  1010→                                            <span className="flex items-center gap-1">
+  1011→                                              <CheckCircle2 className="h-3 w-3" /> PASS
+  1012→                                            </span>
+  1013→                                          ) : f.result === 'warning' ? (
+  1014→                                            'WARN'
+  1015→                                          ) : (
+  1016→                                            <span className="flex items-center gap-1">
+  1017→                                              <XCircle className="h-3 w-3" /> FAIL
+  1018→                                            </span>
+  1019→                                          )}
+  1020→                                        </Badge>
+  1021→                                      </TableCell>
+  1022→                                      <TableCell>
+  1023→                                        <Badge
+  1024→                                          variant="outline"
+  1025→                                          className={SEVERITY_COLORS[severity] + ' text-xs'}
+  1026→                                        >
+  1027→                                          {severity}
+  1028→                                        </Badge>
+  1029→                                      </TableCell>
+  1030→                                      <TableCell className="text-sm text-muted-foreground">
+  1031→                                        {f.detail}
+  1032→                                      </TableCell>
+  1033→                                      <TableCell className="text-xs text-muted-foreground">
+  1034→                                        {f.probe}-{f.result}
+  1035→                                      </TableCell>
+  1036→                                    </TableRow>
+  1037→                                  );
+  1038→                                })}
+  1039→                              </TableBody>
+  1040→                            </Table>
+  1041→                          </div>
+  1042→                        )}
+  1043→                      </AccordionContent>
+  1044→                    </AccordionItem>
+  1045→                  );
+  1046→                })}
+  1047→              </Accordion>
+  1048→            )}
+  1049→          </TabsContent>
+  1050→        </Tabs>
+  1051→
+  1052→        {/* SBOM Dialog */}
+  1053→        <Dialog open={sbomDialogOpen} onOpenChange={setSbomDialogOpen}>
+  1054→          <DialogContent className="sm:max-w-[700px] max-h-[80vh] flex flex-col">
+  1055→            <DialogHeader>
+  1056→              <DialogTitle className="flex items-center gap-2">
+  1057→                <FileText className="h-5 w-5" />
+  1058→                SBOM — CycloneDX ML-BOM
+  1059→              </DialogTitle>
+  1060→              <DialogDescription>
+  1061→                Full Software Bill of Materials for {model.name}
+  1062→              </DialogDescription>
+  1063→            </DialogHeader>
+  1064→            <div className="flex-1 overflow-y-auto rounded-md bg-muted/50 p-4 max-h-[60vh] custom-scrollbar">
+  1065→              <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-words">
+  1066→                <code>{buildSbomJson()}</code>
+  1067→              </pre>
+  1068→            </div>
+  1069→          </DialogContent>
+  1070→        </Dialog>
+  1071→      </div>
+  1072→    </TooltipProvider>
+  1073→  );
+  1074→}

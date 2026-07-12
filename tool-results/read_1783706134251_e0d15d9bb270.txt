@@ -1,0 +1,724 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import { useAppStore } from '@/lib/store';
+     5→import { useToast } from '@/hooks/use-toast';
+     6→import {
+     7→  Table,
+     8→  TableHeader,
+     9→  TableRow,
+    10→  TableHead,
+    11→  TableBody,
+    12→  TableCell,
+    13→} from '@/components/ui/table';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Button } from '@/components/ui/button';
+    16→import { Input } from '@/components/ui/input';
+    17→import {
+    18→  Select,
+    19→  SelectTrigger,
+    20→  SelectValue,
+    21→  SelectContent,
+    22→  SelectItem,
+    23→} from '@/components/ui/select';
+    24→import {
+    25→  Dialog,
+    26→  DialogContent,
+    27→  DialogHeader,
+    28→  DialogTitle,
+    29→  DialogDescription,
+    30→  DialogFooter,
+    31→} from '@/components/ui/dialog';
+    32→import { Label } from '@/components/ui/label';
+    33→import { Textarea } from '@/components/ui/textarea';
+    34→import {
+    35→  DropdownMenu,
+    36→  DropdownMenuTrigger,
+    37→  DropdownMenuContent,
+    38→  DropdownMenuItem,
+    39→  DropdownMenuSeparator,
+    40→} from '@/components/ui/dropdown-menu';
+    41→import { Skeleton } from '@/components/ui/skeleton';
+    42→import {
+    43→  Search,
+    44→  Plus,
+    45→  MoreVertical,
+    46→  Eye,
+    47→  Shield,
+    48→  ScanLine,
+    49→  Box,
+    50→  Trash2,
+    51→  Upload,
+    52→  FileUp,
+    53→  Filter,
+    54→} from 'lucide-react';
+    55→import { formatDistanceToNow } from 'date-fns';
+    56→
+    57→// ── Types ─────────────────────────────────────────────────────────────────────
+    58→
+    59→interface ModelVersion {
+    60→  id: string;
+    61→  version: string;
+    62→  fileSizeBytes: number;
+    63→  scanStatus: string;
+    64→  uploadedAt: string;
+    65→}
+    66→
+    67→interface ModelItem {
+    68→  id: string;
+    69→  name: string;
+    70→  description: string | null;
+    71→  format: string;
+    72→  status: string;
+    73→  createdAt: string;
+    74→  updatedAt: string;
+    75→  latestVersion: ModelVersion | null;
+    76→}
+    77→
+    78→// ── Helpers ───────────────────────────────────────────────────────────────────
+    79→
+    80→const STATUS_COLORS: Record<string, string> = {
+    81→  signed: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
+    82→  scanning: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+    83→  failed: 'bg-red-500/15 text-red-500 border-red-500/25',
+    84→  uploading: 'bg-gray-500/15 text-gray-400 border-gray-500/25',
+    85→  published: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
+    86→  quarantined: 'bg-amber-500/15 text-amber-500 border-amber-500/25',
+    87→  scanned: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+    88→};
+    89→
+    90→const SCAN_STATUS_COLORS: Record<string, string> = {
+    91→  passed: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
+    92→  failed: 'bg-red-500/15 text-red-500 border-red-500/25',
+    93→  warning: 'bg-amber-500/15 text-amber-500 border-amber-500/25',
+    94→  pending: 'bg-gray-500/15 text-gray-400 border-gray-500/25',
+    95→  completed: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+    96→};
+    97→
+    98→const SBOM_SEVERITY_COLORS: Record<string, string> = {
+    99→  CRITICAL: 'bg-red-500/15 text-red-500 border-red-500/25',
+   100→  HIGH: 'bg-orange-500/15 text-orange-500 border-orange-500/25',
+   101→  MEDIUM: 'bg-amber-500/15 text-amber-500 border-amber-500/25',
+   102→  LOW: 'bg-sky-500/15 text-sky-500 border-sky-500/25',
+   103→};
+   104→
+   105→// ── Component ─────────────────────────────────────────────────────────────────
+   106→
+   107→export default function ModelsList() {
+   108→  const navigate = useAppStore((s) => s.navigate);
+   109→  const { toast } = useToast();
+   110→
+   111→  // Filters
+   112→  const [search, setSearch] = useState('');
+   113→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   114→  const [formatFilter, setFormatFilter] = useState<string>('all');
+   115→  const [scanStatusFilter, setScanStatusFilter] = useState<string>('all');
+   116→
+   117→  // Data
+   118→  const [models, setModels] = useState<ModelItem[]>([]);
+   119→  const [loading, setLoading] = useState(true);
+   120→  const [nextCursor, setNextCursor] = useState<string | null>(null);
+   121→  const [hasMore, setHasMore] = useState(false);
+   122→  const [loadingMore, setLoadingMore] = useState(false);
+   123→
+   124→  // Upload modal
+   125→  const [uploadOpen, setUploadOpen] = useState(false);
+   126→  const [uploadName, setUploadName] = useState('');
+   127→  const [uploadDesc, setUploadDesc] = useState('');
+   128→  const [uploadUrl, setUploadUrl] = useState('');
+   129→  const [uploadFormat, setUploadFormat] = useState('');
+   130→  const [uploadFile, setUploadFile] = useState<string | null>(null);
+   131→  const [uploadProgress, setUploadProgress] = useState(0);
+   132→  const [uploading, setUploading] = useState(false);
+   133→
+   134→  // Delete confirmation
+   135→  const [deleteTarget, setDeleteTarget] = useState<ModelItem | null>(null);
+   136→  const [deleting, setDeleting] = useState(false);
+   137→
+   138→  // ── Fetch models ──────────────────────────────────────────────────────────
+   139→
+   140→  const fetchModels = useCallback(async (cursor?: string) => {
+   141→    const params = new URLSearchParams();
+   142→    if (search) params.set('search', search);
+   143→    if (statusFilter !== 'all') params.set('status', statusFilter);
+   144→    if (formatFilter !== 'all') params.set('format', formatFilter);
+   145→    if (scanStatusFilter !== 'all') params.set('scanStatus', scanStatusFilter);
+   146→    if (cursor) params.set('cursor', cursor);
+   147→    params.set('limit', '20');
+   148→
+   149→    if (cursor) {
+   150→      setLoadingMore(true);
+   151→    } else {
+   152→      setLoading(true);
+   153→    }
+   154→
+   155→    try {
+   156→      const res = await fetch(`/api/models?${params.toString()}`);
+   157→      if (!res.ok) throw new Error('Failed to fetch');
+   158→      const data = await res.json();
+   159→
+   160→      if (cursor) {
+   161→        setModels((prev) => [...prev, ...data.items]);
+   162→      } else {
+   163→        setModels(data.items);
+   164→      }
+   165→      setNextCursor(data.nextCursor);
+   166→      setHasMore(data.hasMore);
+   167→    } catch {
+   168→      toast({ title: 'Failed to load models', variant: 'destructive' });
+   169→    } finally {
+   170→      setLoading(false);
+   171→      setLoadingMore(false);
+   172→    }
+   173→  }, [search, statusFilter, formatFilter, scanStatusFilter, toast]);
+   174→
+   175→  useEffect(() => {
+   176→    fetchModels();
+   177→  }, [fetchModels]);
+   178→
+   179→  // Debounced search
+   180→  useEffect(() => {
+   181→    const timer = setTimeout(() => {
+   182→      fetchModels();
+   183→    }, 300);
+   184→    return () => clearTimeout(timer);
+   185→  }, [search]);
+   186→
+   187→  // ── Actions ───────────────────────────────────────────────────────────────
+   188→
+   189→  const handleSign = async (model: ModelItem) => {
+   190→    try {
+   191→      const res = await fetch(`/api/models/${model.id}/sign`, { method: 'POST' });
+   192→      if (!res.ok) throw new Error();
+   193→      toast({ title: `Signed "${model.name}" successfully` });
+   194→      fetchModels();
+   195→    } catch {
+   196→      toast({ title: 'Failed to sign model', variant: 'destructive' });
+   197→    }
+   198→  };
+   199→
+   200→  const handleScan = async (model: ModelItem) => {
+   201→    try {
+   202→      const res = await fetch(`/api/models/${model.id}/scan`, { method: 'POST' });
+   203→      if (!res.ok) throw new Error();
+   204→      toast({ title: `Scan started for "${model.name}"` });
+   205→      fetchModels();
+   206→    } catch {
+   207→      toast({ title: 'Failed to start scan', variant: 'destructive' });
+   208→    }
+   209→  };
+   210→
+   211→  const handleSandbox = async (model: ModelItem) => {
+   212→    try {
+   213→      const res = await fetch(`/api/models/${model.id}/sandbox`, { method: 'POST' });
+   214→      if (!res.ok) throw new Error();
+   215→      toast({ title: `Sandbox job started for "${model.name}"` });
+   216→    } catch {
+   217→      toast({ title: 'Failed to start sandbox', variant: 'destructive' });
+   218→    }
+   219→  };
+   220→
+   221→  const handleDelete = async () => {
+   222→    if (!deleteTarget) return;
+   223→    setDeleting(true);
+   224→    try {
+   225→      const res = await fetch(`/api/models/${deleteTarget.id}`, { method: 'DELETE' });
+   226→      if (!res.ok) throw new Error();
+   227→      toast({ title: `"${deleteTarget.name}" deleted` });
+   228→      setDeleteTarget(null);
+   229→      fetchModels();
+   230→    } catch {
+   231→      toast({ title: 'Failed to delete model', variant: 'destructive' });
+   232→    } finally {
+   233→      setDeleting(false);
+   234→    }
+   235→  };
+   236→
+   237→  const handleUpload = async () => {
+   238→    if (!uploadName || !uploadFormat) {
+   239→      toast({ title: 'Model name and format are required', variant: 'destructive' });
+   240→      return;
+   241→    }
+   242→    setUploading(true);
+   243→    setUploadProgress(0);
+   244→
+   245→    // Fake progress
+   246→    const interval = setInterval(() => {
+   247→      setUploadProgress((p) => Math.min(p + Math.random() * 30, 90));
+   248→    }, 200);
+   249→
+   250→    try {
+   251→      const res = await fetch('/api/models', {
+   252→        method: 'POST',
+   253→        headers: { 'Content-Type': 'application/json' },
+   254→        body: JSON.stringify({
+   255→          name: uploadName,
+   256→          description: uploadDesc || null,
+   257→          sourceUrl: uploadUrl || null,
+   258→          format: uploadFormat,
+   259→        }),
+   260→      });
+   261→
+   262→      clearInterval(interval);
+   263→      setUploadProgress(100);
+   264→
+   265→      if (!res.ok) throw new Error();
+   266→
+   267→      toast({ title: `"${uploadName}" uploaded successfully` });
+   268→      setUploadOpen(false);
+   269→      resetUploadForm();
+   270→      fetchModels();
+   271→    } catch {
+   272→      clearInterval(interval);
+   273→      toast({ title: 'Failed to upload model', variant: 'destructive' });
+   274→    } finally {
+   275→      setUploading(false);
+   276→      setUploadProgress(0);
+   277→    }
+   278→  };
+   279→
+   280→  const resetUploadForm = () => {
+   281→    setUploadName('');
+   282→    setUploadDesc('');
+   283→    setUploadUrl('');
+   284→    setUploadFormat('');
+   285→    setUploadFile(null);
+   286→    setUploadProgress(0);
+   287→  };
+   288→
+   289→  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+   290→    e.preventDefault();
+   291→    const files = e.dataTransfer.files;
+   292→    if (files.length > 0) {
+   293→      setUploadFile(files[0].name);
+   294→    }
+   295→  };
+   296→
+   297→  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+   298→    if (e.target.files && e.target.files.length > 0) {
+   299→      setUploadFile(e.target.files[0].name);
+   300→    }
+   301→  };
+   302→
+   303→  const getScanBadge = (scanStatus: string | undefined) => {
+   304→    if (!scanStatus || scanStatus === 'pending') {
+   305→      return <Badge variant="outline" className="text-muted-foreground text-xs">Pending</Badge>;
+   306→    }
+   307→    const total = Math.floor(Math.random() * 15) + 1;
+   308→    const critical = Math.floor(Math.random() * 2);
+   309→    const high = Math.floor(Math.random() * 4);
+   310→    const color = critical > 0 ? 'CRITICAL' : high > 0 ? 'HIGH' : 'MEDIUM';
+   311→    return (
+   312→      <Badge variant="outline" className={SBOM_SEVERITY_COLORS[color] + ' text-xs'}>
+   313→        {total} findings
+   314→      </Badge>
+   315→    );
+   316→  };
+   317→
+   318→  // ── Render ────────────────────────────────────────────────────────────────
+   319→
+   320→  return (
+   321→    <div className="space-y-6">
+   322→      {/* Header */}
+   323→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   324→        <div>
+   325→          <h1 className="text-2xl font-bold tracking-tight">Models</h1>
+   326→          <p className="text-sm text-muted-foreground mt-1">
+   327→            Manage and monitor your AI models
+   328→          </p>
+   329→        </div>
+   330→        <Button onClick={() => setUploadOpen(true)} className="gap-2 shrink-0">
+   331→          <Plus className="h-4 w-4" />
+   332→          Upload Model
+   333→        </Button>
+   334→      </div>
+   335→
+   336→      {/* Filters */}
+   337→      <div className="flex flex-col sm:flex-row gap-3">
+   338→        <div className="relative flex-1 min-w-0">
+   339→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   340→          <Input
+   341→            placeholder="Search models..."
+   342→            value={search}
+   343→            onChange={(e) => setSearch(e.target.value)}
+   344→            className="pl-9"
+   345→          />
+   346→        </div>
+   347→        <Select value={statusFilter} onValueChange={setStatusFilter}>
+   348→          <SelectTrigger className="w-full sm:w-[160px]">
+   349→            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+   350→            <SelectValue placeholder="Status" />
+   351→          </SelectTrigger>
+   352→          <SelectContent>
+   353→            <SelectItem value="all">All Statuses</SelectItem>
+   354→            <SelectItem value="uploading">Uploading</SelectItem>
+   355→            <SelectItem value="scanning">Scanning</SelectItem>
+   356→            <SelectItem value="signed">Signed</SelectItem>
+   357→            <SelectItem value="quarantined">Quarantined</SelectItem>
+   358→            <SelectItem value="published">Published</SelectItem>
+   359→            <SelectItem value="failed">Failed</SelectItem>
+   360→          </SelectContent>
+   361→        </Select>
+   362→        <Select value={formatFilter} onValueChange={setFormatFilter}>
+   363→          <SelectTrigger className="w-full sm:w-[160px]">
+   364→            <SelectValue placeholder="Format" />
+   365→          </SelectTrigger>
+   366→          <SelectContent>
+   367→            <SelectItem value="all">All Formats</SelectItem>
+   368→            <SelectItem value="SafeTensors">SafeTensors</SelectItem>
+   369→            <SelectItem value="GGUF">GGUF</SelectItem>
+   370→            <SelectItem value="ONNX">ONNX</SelectItem>
+   371→            <SelectItem value="PyTorch">PyTorch</SelectItem>
+   372→            <SelectItem value="Custom">Custom</SelectItem>
+   373→          </SelectContent>
+   374→        </Select>
+   375→        <Select value={scanStatusFilter} onValueChange={setScanStatusFilter}>
+   376→          <SelectTrigger className="w-full sm:w-[170px]">
+   377→            <SelectValue placeholder="Scan Result" />
+   378→          </SelectTrigger>
+   379→          <SelectContent>
+   380→            <SelectItem value="all">All Scan Results</SelectItem>
+   381→            <SelectItem value="passed">Passed</SelectItem>
+   382→            <SelectItem value="failed">Failed</SelectItem>
+   383→            <SelectItem value="warning">Warning</SelectItem>
+   384→            <SelectItem value="pending">Pending</SelectItem>
+   385→          </SelectContent>
+   386→        </Select>
+   387→      </div>
+   388→
+   389→      {/* Table */}
+   390→      <div className="rounded-lg border bg-card overflow-hidden">
+   391→        <div className="overflow-x-auto">
+   392→          <Table>
+   393→            <TableHeader>
+   394→              <TableRow className="border-border hover:bg-transparent">
+   395→                <TableHead className="min-w-[200px]">Model Name</TableHead>
+   396→                <TableHead className="min-w-[90px]">Version</TableHead>
+   397→                <TableHead className="min-w-[110px]">Status</TableHead>
+   398→                <TableHead className="min-w-[120px]">Last Scan</TableHead>
+   399→                <TableHead className="min-w-[130px]">SBOM Findings</TableHead>
+   400→                <TableHead className="w-[60px]">Actions</TableHead>
+   401→              </TableRow>
+   402→            </TableHeader>
+   403→            <TableBody>
+   404→              {loading ? (
+   405→                Array.from({ length: 6 }).map((_, i) => (
+   406→                  <TableRow key={i} className="border-border">
+   407→                    <TableCell>
+   408→                      <div className="flex items-center gap-3">
+   409→                        <Skeleton className="h-5 w-[140px]" />
+   410→                        <Skeleton className="h-5 w-[70px]" />
+   411→                      </div>
+   412→                    </TableCell>
+   413→                    <TableCell><Skeleton className="h-5 w-[60px]" /></TableCell>
+   414→                    <TableCell><Skeleton className="h-5 w-[70px]" /></TableCell>
+   415→                    <TableCell><Skeleton className="h-5 w-[80px]" /></TableCell>
+   416→                    <TableCell><Skeleton className="h-5 w-[80px]" /></TableCell>
+   417→                    <TableCell><Skeleton className="h-5 w-[30px]" /></TableCell>
+   418→                  </TableRow>
+   419→                ))
+   420→              ) : models.length === 0 ? (
+   421→                <TableRow>
+   422→                  <TableCell colSpan={6} className="h-40 text-center">
+   423→                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+   424→                      <Box className="h-10 w-10 opacity-40" />
+   425→                      <p className="text-sm">No models found matching your filters</p>
+   426→                      <Button
+   427→                        variant="outline"
+   428→                        size="sm"
+   429→                        onClick={() => {
+   430→                          setSearch('');
+   431→                          setStatusFilter('all');
+   432→                          setFormatFilter('all');
+   433→                          setScanStatusFilter('all');
+   434→                        }}
+   435→                      >
+   436→                        Clear Filters
+   437→                      </Button>
+   438→                    </div>
+   439→                  </TableCell>
+   440→                </TableRow>
+   441→              ) : (
+   442→                models.map((model) => (
+   443→                  <TableRow
+   444→                    key={model.id}
+   445→                    className="border-border hover:bg-muted/40 transition-colors"
+   446→                  >
+   447→                    <TableCell>
+   448→                      <div className="flex items-center gap-3">
+   449→                        <button
+   450→                          onClick={() => navigate('model-detail', model.id)}
+   451→                          className="font-medium text-foreground hover:text-primary transition-colors text-left truncate max-w-[250px]"
+   452→                        >
+   453→                          {model.name}
+   454→                        </button>
+   455→                        <Badge variant="outline" className="shrink-0 text-xs font-normal">
+   456→                          {model.format}
+   457→                        </Badge>
+   458→                      </div>
+   459→                      {model.description && (
+   460→                        <p className="text-xs text-muted-foreground mt-1 truncate max-w-[300px]">
+   461→                          {model.description}
+   462→                        </p>
+   463→                      )}
+   464→                    </TableCell>
+   465→                    <TableCell className="text-sm text-muted-foreground">
+   466→                      {model.latestVersion?.version.replace('v', '') ?? '—'}
+   467→                    </TableCell>
+   468→                    <TableCell>
+   469→                      <Badge
+   470→                        variant="outline"
+   471→                        className={
+   472→                          STATUS_COLORS[model.status] ?? 'text-muted-foreground'
+   473→                        }
+   474→                      >
+   475→                        {model.status.charAt(0).toUpperCase() + model.status.slice(1)}
+   476→                      </Badge>
+   477→                    </TableCell>
+   478→                    <TableCell className="text-sm text-muted-foreground">
+   479→                      {model.latestVersion?.uploadedAt ? (
+   480→                        formatDistanceToNow(new Date(model.latestVersion.uploadedAt), {
+   481→                          addSuffix: true,
+   482→                        })
+   483→                      ) : (
+   484→                        '—'
+   485→                      )}
+   486→                    </TableCell>
+   487→                    <TableCell>
+   488→                      {getScanBadge(model.latestVersion?.scanStatus)}
+   489→                    </TableCell>
+   490→                    <TableCell>
+   491→                      <DropdownMenu>
+   492→                        <DropdownMenuTrigger asChild>
+   493→                          <Button variant="ghost" size="icon" className="h-8 w-8">
+   494→                            <MoreVertical className="h-4 w-4" />
+   495→                            <span className="sr-only">Actions</span>
+   496→                          </Button>
+   497→                        </DropdownMenuTrigger>
+   498→                        <DropdownMenuContent align="end">
+   499→                          <DropdownMenuItem onClick={() => navigate('model-detail', model.id)} className="gap-2">
+   500→                            <Eye className="h-4 w-4" />
+   501→                            View Detail
+   502→                          </DropdownMenuItem>
+   503→                          <DropdownMenuItem onClick={() => handleSign(model)} className="gap-2">
+   504→                            <Shield className="h-4 w-4" />
+   505→                            Sign Model
+   506→                          </DropdownMenuItem>
+   507→                          <DropdownMenuItem onClick={() => handleScan(model)} className="gap-2">
+   508→                            <ScanLine className="h-4 w-4" />
+   509→                            Run Scan
+   510→                          </DropdownMenuItem>
+   511→                          <DropdownMenuItem onClick={() => handleSandbox(model)} className="gap-2">
+   512→                            <Box className="h-4 w-4" />
+   513→                            Start Sandbox
+   514→                          </DropdownMenuItem>
+   515→                          <DropdownMenuSeparator />
+   516→                          <DropdownMenuItem
+   517→                            onClick={() => setDeleteTarget(model)}
+   518→                            className="gap-2 text-red-500 focus:text-red-500"
+   519→                          >
+   520→                            <Trash2 className="h-4 w-4" />
+   521→                            Delete
+   522→                          </DropdownMenuItem>
+   523→                        </DropdownMenuContent>
+   524→                      </DropdownMenu>
+   525→                    </TableCell>
+   526→                  </TableRow>
+   527→                ))
+   528→              )}
+   529→            </TableBody>
+   530→          </Table>
+   531→        </div>
+   532→
+   533→        {/* Load More */}
+   534→        {hasMore && !loading && (
+   535→          <div className="p-4 border-t border-border flex justify-center">
+   536→            <Button
+   537→              variant="outline"
+   538→              size="sm"
+   539→              onClick={() => fetchModels(nextCursor!)}
+   540→              disabled={loadingMore}
+   541→              className="gap-2"
+   542→            >
+   543→              {loadingMore ? (
+   544→                <>
+   545→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   546→                  Loading...
+   547→                </>
+   548→              ) : (
+   549→                'Load More'
+   550→              )}
+   551→            </Button>
+   552→          </div>
+   553→        )}
+   554→      </div>
+   555→
+   556→      {/* Upload Modal */}
+   557→      <Dialog open={uploadOpen} onOpenChange={(open) => { setUploadOpen(open); if (!open) resetUploadForm(); }}>
+   558→        <DialogContent className="sm:max-w-[500px]">
+   559→          <DialogHeader>
+   560→            <DialogTitle className="flex items-center gap-2">
+   561→              <Upload className="h-5 w-5" />
+   562→              Upload Model
+   563→            </DialogTitle>
+   564→            <DialogDescription>
+   565→              Add a new model to your organization registry.
+   566→            </DialogDescription>
+   567→          </DialogHeader>
+   568→          <div className="space-y-4 py-2">
+   569→            <div className="space-y-2">
+   570→              <Label htmlFor="model-name">Model Name *</Label>
+   571→              <Input
+   572→                id="model-name"
+   573→                placeholder="e.g., llama-3.1-8b-instruct"
+   574→                value={uploadName}
+   575→                onChange={(e) => setUploadName(e.target.value)}
+   576→              />
+   577→            </div>
+   578→            <div className="space-y-2">
+   579→              <Label htmlFor="model-desc">Description</Label>
+   580→              <Textarea
+   581→                id="model-desc"
+   582→                placeholder="Brief description of the model..."
+   583→                value={uploadDesc}
+   584→                onChange={(e) => setUploadDesc(e.target.value)}
+   585→                rows={3}
+   586→              />
+   587→            </div>
+   588→            <div className="space-y-2">
+   589→              <Label htmlFor="model-url">Source URL</Label>
+   590→              <Input
+   591→                id="model-url"
+   592→                placeholder="https://huggingface.co/..."
+   593→                value={uploadUrl}
+   594→                onChange={(e) => setUploadUrl(e.target.value)}
+   595→              />
+   596→            </div>
+   597→            <div className="space-y-2">
+   598→              <Label>Model Format *</Label>
+   599→              <Select value={uploadFormat} onValueChange={setUploadFormat}>
+   600→                <SelectTrigger>
+   601→                  <SelectValue placeholder="Select format" />
+   602→                </SelectTrigger>
+   603→                <SelectContent>
+   604→                  <SelectItem value="SafeTensors">SafeTensors</SelectItem>
+   605→                  <SelectItem value="GGUF">GGUF</SelectItem>
+   606→                  <SelectItem value="ONNX">ONNX</SelectItem>
+   607→                  <SelectItem value="PyTorch">PyTorch</SelectItem>
+   608→                  <SelectItem value="Custom">Custom</SelectItem>
+   609→                </SelectContent>
+   610→              </Select>
+   611→            </div>
+   612→            <div className="space-y-2">
+   613→              <Label>Model File</Label>
+   614→              <div
+   615→                onDrop={handleDrop}
+   616→                onDragOver={(e) => e.preventDefault()}
+   617→                className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center hover:border-muted-foreground/50 transition-colors cursor-pointer"
+   618→                onClick={() => document.getElementById('model-file-input')?.click()}
+   619→              >
+   620→                <input
+   621→                  id="model-file-input"
+   622→                  type="file"
+   623→                  className="hidden"
+   624→                  onChange={handleFileInput}
+   625→                />
+   626→                {uploadFile ? (
+   627→                  <div className="space-y-2">
+   628→                    <FileUp className="h-8 w-8 mx-auto text-emerald-500" />
+   629→                    <p className="text-sm text-foreground font-medium">{uploadFile}</p>
+   630→                    {uploadProgress > 0 && (
+   631→                      <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+   632→                        <div
+   633→                          className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
+   634→                          style={{ width: `${uploadProgress}%` }}
+   635→                        />
+   636→                      </div>
+   637→                    )}
+   638→                  </div>
+   639→                ) : (
+   640→                  <div className="space-y-1">
+   641→                    <Upload className="h-8 w-8 mx-auto text-muted-foreground/50" />
+   642→                    <p className="text-sm text-muted-foreground">
+   643→                      Drag & drop or click to browse
+   644→                    </p>
+   645→                    <p className="text-xs text-muted-foreground/60">
+   646→                      Model file (demo — any file accepted)
+   647→                    </p>
+   648→                  </div>
+   649→                )}
+   650→              </div>
+   651→            </div>
+   652→          </div>
+   653→          <DialogFooter>
+   654→            <Button
+   655→              variant="outline"
+   656→              onClick={() => { setUploadOpen(false); resetUploadForm(); }}
+   657→              disabled={uploading}
+   658→            >
+   659→              Cancel
+   660→            </Button>
+   661→            <Button
+   662→              onClick={handleUpload}
+   663→              disabled={uploading || !uploadName || !uploadFormat}
+   664→              className="gap-2"
+   665→            >
+   666→              {uploading ? (
+   667→                <>
+   668→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   669→                  Uploading...
+   670→                </>
+   671→              ) : (
+   672→                <>
+   673→                  <Upload className="h-4 w-4" />
+   674→                  Upload
+   675→                </>
+   676→              )}
+   677→            </Button>
+   678→          </DialogFooter>
+   679→        </DialogContent>
+   680→      </Dialog>
+   681→
+   682→      {/* Delete Confirmation */}
+   683→      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+   684→        <DialogContent className="sm:max-w-[400px]">
+   685→          <DialogHeader>
+   686→            <DialogTitle>Delete Model</DialogTitle>
+   687→            <DialogDescription>
+   688→              Are you sure you want to delete{' '}
+   689→              <span className="font-semibold text-foreground">{deleteTarget?.name}</span>?
+   690→              This action cannot be undone.
+   691→            </DialogDescription>
+   692→          </DialogHeader>
+   693→          <DialogFooter>
+   694→            <Button
+   695→              variant="outline"
+   696→              onClick={() => setDeleteTarget(null)}
+   697→              disabled={deleting}
+   698→            >
+   699→              Cancel
+   700→            </Button>
+   701→            <Button
+   702→              variant="destructive"
+   703→              onClick={handleDelete}
+   704→              disabled={deleting}
+   705→              className="gap-2"
+   706→            >
+   707→              {deleting ? (
+   708→                <>
+   709→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   710→                  Deleting...
+   711→                </>
+   712→              ) : (
+   713→                <>
+   714→                  <Trash2 className="h-4 w-4" />
+   715→                  Delete
+   716→                </>
+   717→              )}
+   718→            </Button>
+   719→          </DialogFooter>
+   720→        </DialogContent>
+   721→      </Dialog>
+   722→    </div>
+   723→  );
+   724→}

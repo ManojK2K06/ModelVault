@@ -1,0 +1,502 @@
+   500→   500→
+   501→   501→All application secrets, database credentials, API keys, TLS
+   502→   502→certificates, and signing key material are stored in HashiCorp Vault
+   503→   503→with the Transit secrets engine for encryption-as-a-service. Application
+   504→   504→services access secrets through the Vault Agent sidecar pattern: a Vault
+   505→   505→Agent container runs alongside each application pod, authenticates to
+   506→   506→Vault using the Kubernetes auth method (each pod gets a unique JWT bound
+   507→   507→to its service account), and writes the current secret values to a
+   508→   508→shared memory-backed volume. Secrets are never written to disk. The
+   509→   509→Vault Agent automatically renews leases and re-fetches secrets before
+   510→   510→they expire. In production deployments, the Vault unseal key shares are
+   511→   511→distributed across multiple HSM appliances using Shamir's Secret Sharing
+   512→   512→with a 5-of-7 threshold, ensuring no single person or machine can unseal
+   513→   513→Vault independently.
+   514→   514→
+   515→   515→3.4 Application Security
+   516→   516→
+   517→   517→3.4.1 Input Validation and Sanitization
+   518→   518→
+   519→   519→Every API endpoint validates its input against a strict JSON Schema
+   520→   520→definition before processing. The JSON Schema validation runs in the
+   521→   521→api-gateway as a WASM filter, ensuring that malformed, oversized, or
+   522→   522→malicious payloads are rejected before reaching any backend service.
+   523→   523→String fields are validated for length (min/max), character set
+   524→   524→(allowlisting, not denylisting), and format (email, URL, UUID, semver).
+   525→   525→File upload endpoints validate the file's magic bytes against the
+   526→   526→expected format (e.g., SafeTensors files must begin with the JSON header
+   527→   527→followed by the safetensors magic bytes 0x6C6F7261). Uploaded files are
+   528→   528→stored in a staging area with a random UUID filename (never the original
+   529→   529→filename) and are not processed until the upload is complete and the
+   530→   530→checksum matches. All user-supplied text is sanitized to prevent stored
+   531→   531→XSS: HTML tags are stripped, and special characters are entity-encoded
+   532→   532→before storage.
+   533→   533→
+   534→   534→3.4.2 SQL Injection Prevention
+   535→   535→
+   536→   536→All database queries use parameterized prepared statements via pgx (the
+   537→   537→Go PostgreSQL driver). Raw string interpolation in SQL queries is
+   538→   538→prohibited by code review policy and enforced by a custom linter rule
+   539→   539→that scans for fmt.Sprintf or string concatenation in database query
+   540→   540→contexts. Additionally, the PostgreSQL user account used by each
+   541→   541→microservice is granted only the minimum required privileges: SELECT,
+   542→   542→INSERT, UPDATE on specific tables, with no DDL permissions. DDL
+   543→   543→migrations are executed only through a dedicated migration service that
+   544→   544→runs with elevated privileges during deployment and has no runtime API
+   545→   545→access.
+   546→   546→
+   547→   547→3.4.3 Cross-Site Request Forgery (CSRF) Protection
+   548→   548→
+   549→   549→The frontend uses SameSite=Strict cookies for the refresh token, which
+   550→   550→prevents CSRF attacks because the browser will not send the cookie with
+   551→   551→cross-site requests. Additionally, the api-gateway checks the Origin and
+   552→   552→Referer headers on all state-changing requests (POST, PUT, DELETE,
+   553→   553→PATCH) and rejects requests where the origin does not match the expected
+   554→   554→frontend domain. For API-only clients (CLI tools, CI/CD integrations),
+   555→   555→CSRF protection is handled via the OAuth 2.0 client credentials flow,
+   556→   556→which uses bearer tokens instead of cookies.
+   557→   557→
+   558→   558→3.4.4 Dependency Security
+   559→   559→
+   560→   560→All third-party dependencies are pinned to exact versions in go.mod and
+   561→   561→package-lock.json. A nightly CI job runs Trivy and Grype scans on the
+   562→   562→container images for all services, reporting any CVEs with severity
+   563→   563→CRITICAL or HIGH to the security team. Dependencies with known CRITICAL
+   564→   564→CVEs are blocked from deployment via a CI/CD policy gate. The base
+   565→   565→container images use distroless variants
+   566→   566→(gcr.io/distroless/static-debian12) that contain no shell, no package
+   567→   567→manager, and no unnecessary binaries, reducing the attack surface of the
+   568→   568→container runtime.
+   569→   569→
+   570→   570→3.5 Audit Logging
+   571→   571→
+   572→   572→Every action performed in ModelVault is recorded in an immutable audit
+   573→   573→log stored in a separate PostgreSQL database (audit_db) with the
+   574→   574→following properties: append-only table (no UPDATE or DELETE permissions
+   575→   575→granted to any service account), each log entry is cryptographically
+   576→   576→chained to the previous entry using a hash of the previous record's
+   577→   577→content plus a server-side timestamp, making it tamper-evident. The
+   578→   578→audit log captures: the actor (user ID, service account ID, or system),
+   579→   579→the action (API method, internal event), the target resource (model ID,
+   580→   580→policy ID, user ID), the outcome (success or failure with error code),
+   581→   581→the source IP address, the user agent, and a full snapshot of the
+   582→   582→request payload (with sensitive fields like passwords and tokens
+   583→   583→redacted). Audit logs are retained for a minimum of 2 years and are
+   584→   584→replicated to a read replica in a separate availability zone for
+   585→   585→disaster recovery. A daily integrity verification job hashes all audit
+   586→   586→log entries from the previous day and compares the chain hash against
+   587→   587→the expected value, alerting the security team if any discrepancy is
+   588→   588→detected.
+   589→   589→
+   590→   590→4. Backend API Specification
+   591→   591→
+   592→   592→4.1 API Design Principles
+   593→   593→
+   594→   594→All external APIs follow RESTful conventions with OpenAPI 3.1
+   595→   595→specifications. Internal service-to-service communication uses gRPC with
+   596→   596→Protocol Buffers. The API versioning strategy uses URL path versioning
+   597→   597→(e.g., /api/v1/models). All responses use consistent JSON envelopes with
+   598→   598→the structure: { status, data, meta, errors }. Pagination uses
+   599→   599→cursor-based pagination (not offset-based) for all list endpoints,
+   600→   600→returning a next_cursor field. All timestamps are in UTC ISO 8601 format
+   601→   601→with millisecond precision. All IDs are UUIDv4. File upload endpoints
+   602→   602→use resumable uploads via the TUS protocol (tus.io) to support large
+   603→   603→model files up to 50GB with automatic retry on network interruption.
+   604→   604→
+   605→   605→4.2 Authentication Endpoints
+   606→   606→
+   607→   607→  ---------------------------------------------------------------------------------------------
+   608→   608→  Method            Endpoint                                Description       Auth Required
+   609→   609→  ----------------- --------------------------------------- ----------------- -----------------
+   610→   610→  POST              /api/v1/auth/login                      SRP-based login,  No
+   611→   611→                                                            returns access +  
+   612→   612→                                                            refresh tokens    
+   613→   613→
+   614→   614→  POST              /api/v1/auth/register                   Create account    No
+   615→   615→                                                            with email, name, 
+   616→   616→                                                            org name          
+   617→   617→
+   618→   618→  POST              /api/v1/auth/refresh                    Exchange refresh  Refresh token
+   619→   619→                                                            token for new     
+   620→   620→                                                            access token      
+   621→   621→
+   622→   622→  POST              /api/v1/auth/logout                     Revoke refresh    Access token
+   623→   623→                                                            token, clear      
+   624→   624→                                                            server-side       
+   625→   625→                                                            session           
+   626→   626→
+   627→   627→  POST              /api/v1/auth/oidc/{provider}            Redirect to OAuth No
+   628→   628→                                                            provider (Google, 
+   629→   629→                                                            GitHub, Okta)     
+   630→   630→
+   631→   631→  GET               /api/v1/auth/oidc/{provider}/callback   Handle OAuth      No
+   632→   632→                                                            callback, issue   
+   633→   633→                                                            tokens            
+   634→   634→
+   635→   635→  POST              /api/v1/auth/forgot-password            Send password     No
+   636→   636→                                                            reset email       
+   637→   637→                                                            (rate-limited     
+   638→   638→                                                            3/hour)           
+   639→   639→
+   640→   640→  POST              /api/v1/auth/reset-password             Reset password    Reset token
+   641→   641→                                                            using token from  
+   642→   642→                                                            email (SRP)       
+   643→   643→
+   644→   644→  GET               /api/v1/auth/me                         Get current user  Access token
+   645→   645→                                                            profile, org, and 
+   646→   646→                                                            role              
+   647→   647→
+   648→   648→  PUT               /api/v1/auth/me/password                Change password   Access token
+   649→   649→                                                            (requires current 
+   650→   650→                                                            password SRP      
+   651→   651→                                                            proof)            
+   652→   652→  ---------------------------------------------------------------------------------------------
+   653→   653→
+   654→   654→4.3 Model Artifact Endpoints
+   655→   655→
+   656→   656→  -------------------------------------------------------------------------------------------------------
+   657→   657→  Method            Endpoint                                     Description            Auth Required
+   658→   658→  ----------------- -------------------------------------------- ---------------------- -----------------
+   659→   659→  POST              /api/v1/models/upload                        Initiate TUS resumable Developer+
+   660→   660→                                                                 upload for model file  
+   661→   661→
+   662→   662→  PATCH             /api/v1/models/upload/{upload_id}            Upload chunk (TUS      Developer+
+   663→   663→                                                                 protocol)              
+   664→   664→
+   665→   665→  GET               /api/v1/models                               List models in org     Viewer+
+   666→   666→                                                                 (cursor-paginated,     
+   667→   667→                                                                 filterable)            
+   668→   668→
+   669→   669→  GET               /api/v1/models/{model_id}                    Get model metadata,    Viewer+
+   670→   670→                                                                 versions, signatures,  
+   671→   671→                                                                 scan status            
+   672→   672→
+   673→   673→  GET               /api/v1/models/{model_id}/download           Download model         Developer+
+   674→   674→                                                                 artifact               
+   675→   675→                                                                 (integrity-verified,   
+   676→   676→                                                                 signed URL)            
+   677→   677→
+   678→   678→  DELETE            /api/v1/models/{model_id}                    Soft-delete model and  Admin+
+   679→   679→                                                                 all associated data    
+   680→   680→
+   681→   681→  POST              /api/v1/models/{model_id}/sign               Sign model with        Developer+
+   682→   682→                                                                 keyless Sigstore-style 
+   683→   683→                                                                 signing                
+   684→   684→
+   685→   685→  GET               /api/v1/models/{model_id}/verify             Verify model signature Viewer+
+   686→   686→                                                                 and integrity hash     
+   687→   687→
+   688→   688→  GET               /api/v1/models/{model_id}/sbom               Get generated AI-SBOM  Viewer+
+   689→   689→                                                                 in CycloneDX JSON      
+   690→   690→                                                                 format                 
+   691→   691→
+   692→   692→  POST              /api/v1/models/{model_id}/scan               Trigger full scan      Developer+
+   693→   693→                                                                 (SBOM + sandbox +      
+   694→   694→                                                                 signature verify)      
+   695→   695→
+   696→   696→  GET               /api/v1/models/{model_id}/scan/{scan_id}     Get scan results with  Viewer+
+   697→   697→                                                                 detailed findings      
+   698→   698→
+   699→   699→  POST              /api/v1/models/{model_id}/sandbox            Provision sandbox, run Developer+
+   700→   700→                                                                 behavioral tests on    
+   701→   701→                                                                 model                  
+   702→   702→
+   703→   703→  GET               /api/v1/models/{model_id}/sandbox/{job_id}   Get sandbox results:   Viewer+
+   704→   704→                                                                 network calls, file    
+   705→   705→                                                                 access, triggers       
+   706→   706→  -------------------------------------------------------------------------------------------------------
+   707→   707→
+   708→   708→4.4 Organization and User Management Endpoints
+   709→   709→
+   710→   710→  ------------------------------------------------------------------------------------------
+   711→   711→  Method            Endpoint                             Description       Auth Required
+   712→   712→  ----------------- ------------------------------------ ----------------- -----------------
+   713→   713→  GET               /api/v1/org                          Get current       Viewer+
+   714→   714→                                                         organization      
+   715→   715→                                                         details and       
+   716→   716→                                                         settings          
+   717→   717→
+   718→   718→  PUT               /api/v1/org/settings                 Update org        Owner
+   719→   719→                                                         settings (name,   
+   720→   720→                                                         SSO config,       
+   721→   721→                                                         policies)         
+   722→   722→
+   723→   723→  GET               /api/v1/org/members                  List all members  Admin+
+   724→   724→                                                         with roles and    
+   725→   725→                                                         status            
+   726→   726→
+   727→   727→  POST              /api/v1/org/members/invite           Invite user by    Admin+
+   728→   728→                                                         email (sends      
+   729→   729→                                                         magic link)       
+   730→   730→
+   731→   731→  PATCH             /api/v1/org/members/{user_id}/role   Change member     Owner
+   732→   732→                                                         role              
+   733→   733→
+   734→   734→  DELETE            /api/v1/org/members/{user_id}        Remove member     Owner
+   735→   735→                                                         from org          
+   736→   736→
+   737→   737→  GET               /api/v1/org/api-keys                 List API keys     Admin+
+   738→   738→                                                         (last 4 chars     
+   739→   739→                                                         shown, full key   
+   740→   740→                                                         shown once)       
+   741→   741→
+   742→   742→  POST              /api/v1/org/api-keys                 Create new API    Admin+
+   743→   743→                                                         key (name,        
+   744→   744→                                                         expiry,           
+   745→   745→                                                         permissions)      
+   746→   746→
+   747→   747→  DELETE            /api/v1/org/api-keys/{key_id}        Revoke API key    Admin+
+   748→   748→                                                         immediately       
+   749→   749→  ------------------------------------------------------------------------------------------
+   750→   750→
+   751→   751→4.5 Registry and Policy Endpoints
+   752→   752→
+   753→   753→  -----------------------------------------------------------------------------------------------
+   754→   754→  Method            Endpoint                                Description         Auth Required
+   755→   755→  ----------------- --------------------------------------- ------------------- -----------------
+   756→   756→  GET               /api/v1/registries                      List registries in  Viewer+
+   757→   757→                                                            org                 
+   758→   758→
+   759→   759→  POST              /api/v1/registries                      Create new registry Admin+
+   760→   760→                                                            with policy         
+   761→   761→                                                            configuration       
+   762→   762→
+   763→   763→  GET               /api/v1/registries/{reg_id}             Get registry        Viewer+
+   764→   764→                                                            details, policy,    
+   765→   765→                                                            and artifact count  
+   766→   766→
+   767→   767→  PUT               /api/v1/registries/{reg_id}/policy      Update deployment   Admin+
+   768→   768→                                                            policy (OPA Rego    
+   769→   769→                                                            rules)              
+   770→   770→
+   771→   771→  POST              /api/v1/registries/{reg_id}/publish     Publish signed      Developer+
+   772→   772→                                                            model to registry   
+   773→   773→
+   774→   774→  GET               /api/v1/registries/{reg_id}/artifacts   List published      Viewer+
+   775→   775→                                                            artifacts with      
+   776→   776→                                                            versions            
+   777→   777→
+   778→   778→  POST              /api/v1/registries/{reg_id}/gate        Evaluate deployment Developer+
+   779→   779→                                                            gate for a model    
+   780→   780→                                                            version             
+   781→   781→
+   782→   782→  GET               /api/v1/audit                           Query audit log     Admin+
+   783→   783→                                                            (filterable,        
+   784→   784→                                                            cursor-paginated)   
+   785→   785→
+   786→   786→  GET               /api/v1/audit/export                    Export audit log as Admin+
+   787→   787→                                                            CSV (date range,    
+   788→   788→                                                            filters)            
+   789→   789→  -----------------------------------------------------------------------------------------------
+   790→   790→
+   791→   791→4.6 Key File Upload Process (TUS Resumable)
+   792→   792→
+   793→   793→Model file uploads use the TUS protocol to handle files up to 50GB
+   794→   794→reliably. The process works as follows: First, the client sends a POST
+   795→   795→to /api/v1/models/upload with headers specifying the file name, total
+   796→   796→size (Content-Length), and model format (X-Model-Format:
+   797→   797→safetensors|gguf|onnx|pytorch|custom). The server validates that the
+   798→   798→organization has not exceeded its storage quota, creates a database
+   799→   799→record for the upload with status 'pending', and returns a Location
+   800→   800→header with the upload URL containing a UUID upload_id. The server also
+   801→   801→returns an Upload-Length header confirming the expected size.
+   802→   802→
+   803→   803→Second, the client uploads the file in chunks by sending PATCH requests
+   804→   804→to the upload URL. Each PATCH includes a Content-Range header (e.g.,
+   805→   805→'bytes 0-5242879/524288000') and the raw binary chunk as the request
+   806→   806→body. The server writes each chunk to a staging area in MinIO using the
+   807→   807→multipart upload API. Each chunk is checksummed with SHA-256, and the
+   808→   808→partial checksums are stored in Redis. If a chunk upload fails (network
+   809→   809→error, timeout), the client retries that specific chunk. TUS handles
+   810→   810→this via the Upload-Offset header: the server tracks how many bytes have
+   811→   811→been received and tells the client where to resume.
+   812→   812→
+   813→   813→Third, when the final chunk is uploaded, the server concatenates all
+   814→   814→parts in MinIO, computes the final SHA-256 checksum of the complete
+   815→   815→file, and compares it against the checksum provided by the client in the
+   816→   816→Upload-Metadata header. If the checksums match, the upload status is set
+   817→   817→to 'complete', the file is moved from the staging bucket to the
+   818→   818→permanent storage bucket with a UUID-based path (e.g.,
+   819→   819→org/{org_id}/models/{model_id}/v1/artifact), and a model_version record
+   820→   820→is created in the database with the file size, format, SHA-256 hash,
+   821→   821→storage path, and upload timestamp. If the checksum does not match, the
+   822→   822→upload is marked 'failed' and all staged parts are deleted. The entire
+   823→   823→upload process generates audit log entries for initiation, each chunk,
+   824→   824→completion, or failure.
+   825→   825→
+   826→   826→5. Database Schema
+   827→   827→
+   828→   828→5.1 Schema Overview
+   829→   829→
+   830→   830→The database uses PostgreSQL 16 with nine logical databases (one per
+   831→   831→microservice plus a shared auth database). Each microservice owns its
+   832→   832→schema and has no cross-schema query access. Data that must be shared
+   833→   833→between services is replicated asynchronously via Kafka events. All
+   834→   834→tables use UUIDv4 primary keys. All timestamps are stored as TIMESTAMPTZ
+   835→   835→in UTC. Row-level security (RLS) is enabled on all tables that contain
+   836→   836→organization-scoped data, ensuring that a compromised service account
+   837→   837→can only access data belonging to the organization it is authorized for.
+   838→   838→
+   839→   839→5.2 Core Tables
+   840→   840→
+   841→   841→5.2.1 organizations
+   842→   842→
+   843→   843→  -----------------------------------------------------------------------------
+   844→   844→  Column                Type              Constraints         Description
+   845→   845→  --------------------- ----------------- ------------------- -----------------
+   846→   846→  id                    UUID              PK, DEFAULT         Organization
+   847→   847→                                          gen_random_uuid()   unique identifier
+   848→   848→
+   849→   849→  name                  VARCHAR(255)      NOT NULL,           Display name
+   850→   850→                                          CHECK(length > 0)   
+   851→   851→
+   852→   852→  slug                  VARCHAR(100)      UNIQUE, NOT NULL    URL-safe
+   853→   853→                                                              identifier
+   854→   854→
+   855→   855→  owner_id              UUID              NOT NULL, FK        Organization
+   856→   856→                                          users(id)           owner user
+   857→   857→                                                              reference
+   858→   858→
+   859→   859→  plan                  VARCHAR(50)       NOT NULL, DEFAULT   Pricing plan tier
+   860→   860→                                          'free'              
+   861→   861→
+   862→   862→  storage_quota_bytes   BIGINT            NOT NULL, DEFAULT   Max storage (10GB
+   863→   863→                                          10737418240         free)
+   864→   864→
+   865→   865→  storage_used_bytes    BIGINT            NOT NULL, DEFAULT 0 Current storage
+   866→   866→                                                              usage
+   867→   867→
+   868→   868→  max_members           INT               NOT NULL, DEFAULT 5 Max team members
+   869→   869→
+   870→   870→  sso_config            JSONB             NULL                OIDC/SAML
+   871→   871→                                                              configuration
+   872→   872→                                                              (encrypted)
+   873→   873→
+   874→   874→  created_at            TIMESTAMPTZ       NOT NULL, DEFAULT   Creation
+   875→   875→                                          now()               timestamp
+   876→   876→
+   877→   877→  updated_at            TIMESTAMPTZ       NOT NULL, DEFAULT   Last modification
+   878→   878→                                          now()               timestamp
+   879→   879→  -----------------------------------------------------------------------------
+   880→   880→
+   881→   881→5.2.2 users
+   882→   882→
+   883→   883→  ---------------------------------------------------------------------------------
+   884→   884→  Column                  Type              Constraints         Description
+   885→   885→  ----------------------- ----------------- ------------------- -------------------
+   886→   886→  id                      UUID              PK, DEFAULT         User unique
+   887→   887→                                            gen_random_uuid()   identifier
+   888→   888→
+   889→   889→  email                   VARCHAR(255)      UNIQUE, NOT NULL    Email address
+   890→   890→                                                                (login)
+   891→   891→
+   892→   892→  password_verifier       BYTEA             NOT NULL            SRP verifier
+   893→   893→                                                                (scrypt-derived,
+   894→   894→                                                                never plaintext)
+   895→   895→
+   896→   896→  password_salt           BYTEA             NOT NULL            SRP salt
+   897→   897→
+   898→   898→  name                    VARCHAR(255)      NOT NULL            Display name
+   899→   899→
+   900→   900→  avatar_url              VARCHAR(1024)     NULL                Profile picture URL
+   901→   901→
+   902→   902→  mfa_enabled             BOOLEAN           NOT NULL, DEFAULT   Is TOTP MFA active
+   903→   903→                                            false               
+   904→   904→
+   905→   905→  mfa_secret_encrypted    BYTEA             NULL                TOTP secret
+   906→   906→                                                                (Vault-encrypted)
+   907→   907→
+   908→   908→  last_login_at           TIMESTAMPTZ       NULL                Last successful
+   909→   909→                                                                login
+   910→   910→
+   911→   911→  failed_login_attempts   INT               NOT NULL, DEFAULT 0 Consecutive failed
+   912→   912→                                                                logins
+   913→   913→
+   914→   914→  locked_until            TIMESTAMPTZ       NULL                Account lock expiry
+   915→   915→                                                                (NULL = unlocked)
+   916→   916→
+   917→   917→  created_at              TIMESTAMPTZ       NOT NULL, DEFAULT   Creation timestamp
+   918→   918→                                            now()               
+   919→   919→  ---------------------------------------------------------------------------------
+   920→   920→
+   921→   921→5.2.3 org_members
+   922→   922→
+   923→   923→  ----------------------------------------------------------------------------------------------
+   924→   924→  Column               Type              Constraints       Description
+   925→   925→  -------------------- ----------------- ----------------- -------------------------------------
+   926→   926→  id                   UUID              PK                Membership unique ID
+   927→   927→
+   928→   928→  org_id               UUID              FK orgs(id), NOT  Organization reference
+   929→   929→                                         NULL              
+   930→   930→
+   931→   931→  user_id              UUID              FK users(id), NOT User reference
+   932→   932→                                         NULL              
+   933→   933→
+   934→   934→  role                 VARCHAR(50)       NOT NULL,         owner|admin|developer|viewer|custom
+   935→   935→                                         CHECK(role IN     
+   936→   936→                                         (...))            
+   937→   937→
+   938→   938→  custom_permissions   JSONB             NULL              Custom role permissions array
+   939→   939→
+   940→   940→  invited_by           UUID              FK users(id), NOT Who invited this member
+   941→   941→                                         NULL              
+   942→   942→
+   943→   943→  accepted_at          TIMESTAMPTZ       NULL              When invite was accepted
+   944→   944→
+   945→   945→  UNIQUE(org_id,                         One membership    
+   946→   946→  user_id)                               per user per org  
+   947→   947→  ----------------------------------------------------------------------------------------------
+   948→   948→
+   949→   949→5.2.4 models
+   950→   950→
+   951→   951→  --------------------------------------------------------------------------------------------------------------------
+   952→   952→  Column              Type              Constraints           Description
+   953→   953→  ------------------- ----------------- --------------------- --------------------------------------------------------
+   954→   954→  id                  UUID              PK                    Model unique identifier
+   955→   955→
+   956→   956→  org_id              UUID              FK orgs(id), NOT      Owning organization
+   957→   957→                                        NULL, RLS             
+   958→   958→
+   959→   959→  name                VARCHAR(255)      NOT NULL              Model display name
+   960→   960→
+   961→   961→  description         TEXT              NULL                  Model description
+   962→   962→
+   963→   963→  source_url          VARCHAR(2048)     NULL                  Original source (e.g., HuggingFace URL)
+   964→   964→
+   965→   965→  format              VARCHAR(50)       NOT NULL              safetensors|gguf|onnx|pytorch|custom
+   966→   966→
+   967→   967→  latest_version_id   UUID              FK                    Current active version
+   968→   968→                                        model_versions(id),   
+   969→   969→                                        NULL                  
+   970→   970→
+   971→   971→  status              VARCHAR(50)       NOT NULL, DEFAULT     uploading|scanning|signed|quarantined|published|failed
+   972→   972→                                        'uploading'           
+   973→   973→
+   974→   974→  created_by          UUID              FK users(id), NOT     Upload user
+   975→   975→                                        NULL                  
+   976→   976→
+   977→   977→  created_at          TIMESTAMPTZ       NOT NULL, DEFAULT     Creation timestamp
+   978→   978→                                        now()                 
+   979→   979→
+   980→   980→  updated_at          TIMESTAMPTZ       NOT NULL, DEFAULT     Last status change
+   981→   981→                                        now()                 
+   982→   982→
+   983→   983→  deleted_at          TIMESTAMPTZ       NULL                  Soft-delete timestamp (NULL = active)
+   984→   984→  --------------------------------------------------------------------------------------------------------------------
+   985→   985→
+   986→   986→5.2.5 model_versions
+   987→   987→
+   988→   988→  --------------------------------------------------------------------------------------------------
+   989→   989→  Column             Type              Constraints       Description
+   990→   990→  ------------------ ----------------- ----------------- -------------------------------------------
+   991→   991→  id                 UUID              PK                Version unique identifier
+   992→   992→
+   993→   993→  model_id           UUID              FK models(id),    Parent model
+   994→   994→                                       NOT NULL          
+   995→   995→
+   996→   996→  version            VARCHAR(50)       NOT NULL          Semantic version (e.g., 1.0.0)
+   997→   997→
+   998→   998→  storage_path       VARCHAR(1024)     NOT NULL          MinIO object path
+   999→   999→
+
+[showing lines 500-999 of 1787; use offset=1000 with limit to continue reading]

@@ -1,0 +1,502 @@
+  1000→  1000→  file_size_bytes    BIGINT            NOT NULL          File size in bytes
+  1001→  1001→
+  1002→  1002→  sha256_hash        VARCHAR(64)       NOT NULL          SHA-256 of the complete file
+  1003→  1003→
+  1004→  1004→  sha512_hash        VARCHAR(128)      NOT NULL          SHA-512 for collision resistance
+  1005→  1005→
+  1006→  1006→  merkle_root        VARCHAR(64)       NOT NULL          Merkle tree root of chunk hashes
+  1007→  1007→
+  1008→  1008→  signature_id       UUID              FK                Signing record reference
+  1009→  1009→                                       signatures(id),   
+  1010→  1010→                                       NULL              
+  1011→  1011→
+  1012→  1012→  sbom_id            UUID              FK sboms(id),     Generated SBOM reference
+  1013→  1013→                                       NULL              
+  1014→  1014→
+  1015→  1015→  scan_status        VARCHAR(50)       NOT NULL, DEFAULT pending|in_progress|passed|failed|warning
+  1016→  1016→                                       'pending'         
+  1017→  1017→
+  1018→  1018→  scan_result_json   JSONB             NULL              Detailed scan/findings result
+  1019→  1019→
+  1020→  1020→  uploaded_at        TIMESTAMPTZ       NOT NULL, DEFAULT Upload completion time
+  1021→  1021→                                       now()             
+  1022→  1022→
+  1023→  1023→  UNIQUE(model_id,                     One version per   
+  1024→  1024→  version)                             model             
+  1025→  1025→  --------------------------------------------------------------------------------------------------
+  1026→  1026→
+  1027→  1027→5.2.6 signatures
+  1028→  1028→
+  1029→  1029→  -------------------------------------------------------------------------------
+  1030→  1030→  Column                Type              Constraints           Description
+  1031→  1031→  --------------------- ----------------- --------------------- -----------------
+  1032→  1032→  id                    UUID              PK                    Signature record
+  1033→  1033→                                                                ID
+  1034→  1034→
+  1035→  1035→  model_version_id      UUID              FK                    Signed model
+  1036→  1036→                                          model_versions(id),   version
+  1037→  1037→                                          NOT NULL              
+  1038→  1038→
+  1039→  1039→  signer_identity       VARCHAR(255)      NOT NULL              OIDC identity
+  1040→  1040→                                                                (email or service
+  1041→  1041→                                                                account)
+  1042→  1042→
+  1043→  1043→  signer_key_id         VARCHAR(255)      NOT NULL              Fulcio
+  1044→  1044→                                                                certificate key
+  1045→  1045→                                                                ID
+  1046→  1046→
+  1047→  1047→  signature_algorithm   VARCHAR(50)       NOT NULL              ecdsa-sha2-256
+  1048→  1048→
+  1049→  1049→  signature_value       BYTEA             NOT NULL              Raw signature
+  1050→  1050→                                                                bytes
+  1051→  1051→
+  1052→  1052→  certificate_chain     BYTEA             NOT NULL              X.509 certificate
+  1053→  1053→                                                                chain (DER)
+  1054→  1054→
+  1055→  1055→  signed_at             TIMESTAMPTZ       NOT NULL, DEFAULT     Signing timestamp
+  1056→  1056→                                          now()                 
+  1057→  1057→
+  1058→  1058→  verified              BOOLEAN           NOT NULL, DEFAULT     Has signature
+  1059→  1059→                                          false                 been verified
+  1060→  1060→  -------------------------------------------------------------------------------
+  1061→  1061→
+  1062→  1062→5.2.7 sboms
+  1063→  1063→
+  1064→  1064→  ------------------------------------------------------------------------------------
+  1065→  1065→  Column                Type              Constraints           Description
+  1066→  1066→  --------------------- ----------------- --------------------- ----------------------
+  1067→  1067→  id                    UUID              PK                    SBOM record ID
+  1068→  1068→
+  1069→  1069→  model_version_id      UUID              FK                    Model version this
+  1070→  1070→                                          model_versions(id),   SBOM describes
+  1071→  1071→                                          NOT NULL              
+  1072→  1072→
+  1073→  1073→  format                VARCHAR(50)       NOT NULL              cyclonedx-ml-bom-1.0
+  1074→  1074→
+  1075→  1075→  bom_json              JSONB             NOT NULL              Complete SBOM document
+  1076→  1076→
+  1077→  1077→  dependency_count      INT               NOT NULL, DEFAULT 0   Total dependencies
+  1078→  1078→                                                                found
+  1079→  1079→
+  1080→  1080→  vulnerability_count   INT               NOT NULL, DEFAULT 0   Dependencies with
+  1081→  1081→                                                                known CVEs
+  1082→  1082→
+  1083→  1083→  generated_at          TIMESTAMPTZ       NOT NULL, DEFAULT     Generation timestamp
+  1084→  1084→                                          now()                 
+  1085→  1085→  ------------------------------------------------------------------------------------
+  1086→  1086→
+  1087→  1087→5.2.8 sandbox_jobs
+  1088→  1088→
+  1089→  1089→  -------------------------------------------------------------------------------------------------------------------
+  1090→  1090→  Column             Type              Constraints           Description
+  1091→  1091→  ------------------ ----------------- --------------------- --------------------------------------------------------
+  1092→  1092→  id                 UUID              PK                    Sandbox job ID
+  1093→  1093→
+  1094→  1094→  model_version_id   UUID              FK                    Model version being tested
+  1095→  1095→                                       model_versions(id),   
+  1096→  1096→                                       NOT NULL              
+  1097→  1097→
+  1098→  1098→  status             VARCHAR(50)       NOT NULL, DEFAULT     queued|provisioning|running|completed|failed|cancelled
+  1099→  1099→                                       'queued'              
+  1100→  1100→
+  1101→  1101→  vm_id              VARCHAR(128)      NULL                  Firecracker VM identifier
+  1102→  1102→
+  1103→  1103→  config_json        JSONB             NOT NULL              Sandbox configuration (timeout, memory, network policy)
+  1104→  1104→
+  1105→  1105→  result_json        JSONB             NULL                  Behavioral test results (network, file, triggers)
+  1106→  1106→
+  1107→  1107→  started_at         TIMESTAMPTZ       NULL                  VM start time
+  1108→  1108→
+  1109→  1109→  completed_at       TIMESTAMPTZ       NULL                  VM teardown time
+  1110→  1110→
+  1111→  1111→  duration_ms        INT               NULL                  Total execution duration
+  1112→  1112→
+  1113→  1113→  submitted_by       UUID              FK users(id), NOT     User who triggered the sandbox
+  1114→  1114→                                       NULL                  
+  1115→  1115→  -------------------------------------------------------------------------------------------------------------------
+  1116→  1116→
+  1117→  1117→5.2.9 audit_log
+  1118→  1118→
+  1119→  1119→  -------------------------------------------------------------------------------------------
+  1120→  1120→  Column             Type              Constraints       Description
+  1121→  1121→  ------------------ ----------------- ----------------- ------------------------------------
+  1122→  1122→  id                 BIGSERIAL         PK                Auto-incrementing log ID
+  1123→  1123→
+  1124→  1124→  timestamp          TIMESTAMPTZ       NOT NULL, DEFAULT Event timestamp (UTC, ms precision)
+  1125→  1125→                                       now()             
+  1126→  1126→
+  1127→  1127→  actor_id           UUID              NOT NULL          User or service account that
+  1128→  1128→                                                         performed the action
+  1129→  1129→
+  1130→  1130→  actor_type         VARCHAR(20)       NOT NULL          user|service|system
+  1131→  1131→
+  1132→  1132→  action             VARCHAR(255)      NOT NULL          Action performed (e.g.,
+  1133→  1133→                                                         model.upload.initiate)
+  1134→  1134→
+  1135→  1135→  resource_type      VARCHAR(50)       NOT NULL          model|user|org|policy|api_key|scan
+  1136→  1136→
+  1137→  1137→  resource_id        UUID              NOT NULL          ID of the affected resource
+  1138→  1138→
+  1139→  1139→  outcome            VARCHAR(20)       NOT NULL          success|failure|denied
+  1140→  1140→
+  1141→  1141→  error_code         VARCHAR(50)       NULL              Error code if outcome=failure
+  1142→  1142→
+  1143→  1143→  source_ip          INET              NOT NULL          Client IP address
+  1144→  1144→
+  1145→  1145→  user_agent         VARCHAR(1024)     NULL              Client user agent string
+  1146→  1146→
+  1147→  1147→  request_snapshot   JSONB             NULL              Redacted request payload
+  1148→  1148→
+  1149→  1149→  prev_hash          VARCHAR(64)       NOT NULL          Hash of previous log entry (chain
+  1150→  1150→                                                         integrity)
+  1151→  1151→
+  1152→  1152→  entry_hash         VARCHAR(64)       NOT NULL          Hash of this log entry (SHA-256)
+  1153→  1153→  -------------------------------------------------------------------------------------------
+  1154→  1154→
+  1155→  1155→The audit_log table is append-only. The PostgreSQL role used by the
+  1156→  1156→audit-service has INSERT-only permissions on this table. No UPDATE or
+  1157→  1157→DELETE grants exist. The prev_hash and entry_hash columns create a
+  1158→  1158→cryptographic chain: each entry's entry_hash is computed as
+  1159→  1159→SHA-256(prev_hash || timestamp || actor_id || action || resource_id ||
+  1160→  1160→outcome). A daily verification job computes the expected chain and
+  1161→  1161→compares it against the stored hashes, alerting on any tampering.
+  1162→  1162→
+  1163→  1163→6. Feature Specifications
+  1164→  1164→
+  1165→  1165→6.1 Feature 1: Model Signing and Verification
+  1166→  1166→
+  1167→  1167→6.1.1 How Model Signing Works
+  1168→  1168→
+  1169→  1169→Model signing implements a Sigstore-inspired keyless signing workflow.
+  1170→  1170→When a user clicks 'Sign Model' on a model version, the following
+  1171→  1171→process executes: The signing-service receives a sign request containing
+  1172→  1172→the model_version_id and the user's JWT access token. The service first
+  1173→  1173→retrieves the model's SHA-256 and Merkle root hash from the
+  1174→  1174→model_versions table. It then constructs a signing payload that includes
+  1175→  1175→the model ID, version string, SHA-256 hash, Merkle root, file size,
+  1176→  1176→format, and the current timestamp. This payload is serialized to JSON
+  1177→  1177→and canonicalized (sorted keys, no whitespace) to ensure deterministic
+  1178→  1178→hashing. The payload is then hashed with SHA-256 to produce the digest
+  1179→  1179→that will be signed.
+  1180→  1180→
+  1181→  1181→The signing-service generates a short-lived ephemeral key pair (ECDSA
+  1182→  1182→P-256) for this signing operation. It then contacts the Fulcio
+  1183→  1183→certificate authority (or an internal Fulcio-compatible CA for
+  1184→  1184→self-hosted deployments) with an OIDC identity token (obtained from the
+  1185→  1185→user's session) and the ephemeral public key. Fulcio issues a
+  1186→  1186→short-lived X.509 certificate that binds the ephemeral public key to the
+  1187→  1187→user's OIDC identity (email). The signing-service signs the payload
+  1188→  1188→digest with the ephemeral private key, producing an ECDSA-SHA256
+  1189→  1189→signature. The signature, the X.509 certificate chain, and the signing
+  1190→  1190→payload are all stored in the signatures table. The ephemeral private
+  1191→  1191→key is then securely erased from memory. The certificate chain is also
+  1192→  1192→submitted to a Rekor transparency log (or an internal immutable log for
+  1193→  1193→self-hosted deployments), which returns a signed inclusion proof.
+  1194→  1194→
+  1195→  1195→Verification reverses this process: given a model file and a signature
+  1196→  1196→record, the system recomputes the SHA-256 hash of the file, reconstructs
+  1197→  1197→the signing payload, verifies the ECDSA signature against the X.509
+  1198→  1198→certificate from the stored certificate chain, validates that the
+  1199→  1199→certificate was issued by a trusted CA, checks that the certificate has
+  1200→  1200→not expired, and optionally verifies the Rekor inclusion proof. If all
+  1201→  1201→checks pass, the verification returns 'VERIFIED' with the signer's
+  1202→  1202→identity. If any check fails, it returns 'FAILED' with a specific reason
+  1203→  1203→(hash mismatch, signature invalid, certificate expired, untrusted CA,
+  1204→  1204→etc.).
+  1205→  1205→
+  1206→  1206→6.1.2 Merkle Tree Integrity
+  1207→  1207→
+  1208→  1208→During upload, the model file is split into 4MB chunks. Each chunk is
+  1209→  1209→hashed with SHA-256, producing a list of leaf hashes. These leaf hashes
+  1210→  1210→are arranged into a binary Merkle tree: pairs of leaf hashes are
+  1211→  1211→concatenated and hashed to produce parent nodes, up to a single root
+  1212→  1212→hash. The Merkle root is stored in the model_versions table alongside
+  1213→  1213→the flat SHA-256 of the complete file. During verification, both the
+  1214→  1214→flat hash and the Merkle root are verified. The Merkle tree enables
+  1215→  1215→efficient proof that a specific chunk of the model file has not been
+  1216→  1216→tampered with, without requiring the entire file to be re-downloaded.
+  1217→  1217→This is particularly useful for partial model updates and for verifying
+  1218→  1218→models in distributed storage systems where different chunks may reside
+  1219→  1219→on different nodes.
+  1220→  1220→
+  1221→  1221→6.2 Feature 2: AI-SBOM Generation
+  1222→  1222→
+  1223→  1223→6.2.1 How SBOM Generation Works
+  1224→  1224→
+  1225→  1225→AI-SBOM generation is a fully deterministic, non-AI process that uses
+  1226→  1226→static analysis to extract metadata from model artifact files. When a
+  1227→  1227→model is uploaded (or when the user explicitly triggers SBOM
+  1228→  1228→generation), the sbom-service retrieves the model file from MinIO and
+  1229→  1229→analyzes it based on its detected format. The analysis extracts: model
+  1230→  1230→architecture metadata (number of layers, parameter count, tensor
+  1231→  1231→dimensions, dtype), the complete dependency tree of Python packages
+  1232→  1232→required to load and run the model (extracted from any embedded
+  1233→  1233→requirements.txt, setup.py, pyproject.toml, or from the model card
+  1234→  1234→metadata), a list of all third-party model components (base model
+  1235→  1235→references, adapter configurations, tokenizer files), hardware
+  1236→  1236→requirements (inferred from tensor sizes and dtype), and training data
+  1237→  1237→provenance metadata if available from the model card or embedded
+  1238→  1238→metadata.
+  1239→  1239→
+  1240→  1240→For SafeTensors format files, the parser reads the JSON header at the
+  1241→  1241→start of the file, which contains the tensor metadata including names,
+  1242→  1242→shapes, and dtypes. It calculates the total parameter count by
+  1243→  1243→multiplying the dimensions of each tensor. It identifies the model
+  1244→  1244→architecture by matching tensor naming patterns (e.g.,
+  1245→  1245→'transformer.h.{N}.attn.c_attn.weight' indicates a GPT-2 style
+  1246→  1246→architecture). For GGUF files, the parser reads the GGUF header which
+  1247→  1247→contains key-value metadata including the model architecture,
+  1248→  1248→quantization level, and embedding dimensions. For ONNX files, the parser
+  1249→  1249→uses the ONNX protobuf schema to read the model graph, extracting
+  1250→  1250→operation types, input/output shapes, and opset version. For PyTorch
+  1251→  1251→.bin or .pt files, the parser loads the file using PyTorch's safe_load
+  1252→  1252→function (which uses zip-based inspection without executing any code)
+  1253→  1253→and extracts the state dict keys, tensor shapes, and dtypes.
+  1254→  1254→
+  1255→  1255→After extraction, the sbom-service cross-references all discovered
+  1256→  1256→dependencies against the OSV (Open Source Vulnerabilities) database API
+  1257→  1257→to identify known vulnerabilities. Each dependency is looked up by its
+  1258→  1258→package name and version. If a CVE is found, it is recorded with its
+  1259→  1259→severity (CRITICAL, HIGH, MEDIUM, LOW), CVSS score, and a link to the
+  1260→  1260→advisory. The final SBOM is output in CycloneDX ML-BOM 1.0 JSON format,
+  1261→  1261→which extends the standard CycloneDX format with ML-specific fields
+  1262→  1262→including model architecture, parameter count, training data provenance,
+  1263→  1263→and hardware requirements. The SBOM JSON is stored in the sboms table
+  1264→  1264→and is also available for download via the API endpoint GET
+  1265→  1265→/api/v1/models/{model_id}/sbom.
+  1266→  1266→
+  1267→  1267→6.3 Feature 3: Pre-Deployment Quarantine Sandbox
+  1268→  1268→
+  1269→  1269→6.3.1 Sandbox Architecture
+  1270→  1270→
+  1271→  1271→The quarantine sandbox is the most critical security feature of
+  1272→  1272→ModelVault. It provides a completely isolated execution environment
+  1273→  1273→where a model is loaded and exercised with a battery of behavioral tests
+  1274→  1274→to detect malicious behavior before the model is approved for
+  1275→  1275→deployment. The sandbox uses Firecracker microVMs, which are lightweight
+  1276→  1276→virtual machines that boot in under 125 milliseconds with a dedicated
+  1277→  1277→kernel, providing hardware-level isolation from the host system. Each
+  1278→  1278→sandbox job gets its own Firecracker VM with a minimal root filesystem
+  1279→  1279→(based on Alpine Linux, approximately 5MB), a Python runtime (CPython
+  1280→  1280→3.12), a PyTorch/CUDA runtime (only CPU mode for security), and the
+  1281→  1281→model file under test.
+  1282→  1282→
+  1283→  1283→The VM is configured with a strict network policy enforced by iptables:
+  1284→  1284→all outbound network connections are blocked by default. The only
+  1285→  1285→allowed outbound traffic is a DNS resolution to a mock DNS server that
+  1286→  1286→returns NXDOMAIN for all queries, used to test whether the model
+  1287→  1287→attempts to perform DNS lookups (which would indicate potential data
+  1288→  1288→exfiltration). All file system access is monitored using eBPF programs
+  1289→  1289→attached to the VFS layer, which capture every open(), read(), write(),
+  1290→  1290→and unlink() syscall with the full path, flags, and return value. The
+  1291→  1291→eBPF programs are compiled from BPF C code using the bcc toolkit and
+  1292→  1292→loaded into the VM's kernel at boot time. Syscall events are streamed to
+  1293→  1293→a sidecar process over a virtio-serial channel, which aggregates them
+  1294→  1294→and writes the structured event stream to the sandbox_jobs.result_json
+  1295→  1295→field in the database.
+  1296→  1296→
+  1297→  1297→6.3.2 Behavioral Test Suite
+  1298→  1298→
+  1299→  1299→The sandbox runs a deterministic sequence of tests against the loaded
+  1300→  1300→model. No test uses AI or machine learning; all tests are rule-based and
+  1301→  1301→produce deterministic pass/fail results. The test suite consists of the
+  1302→  1302→following checks, each producing a structured finding with severity,
+  1303→  1303→description, and evidence:
+  1304→  1304→
+  1305→  1305→  --------------------------------------------------------------------------------------
+  1306→  1306→  Test              What It Does             Failure Severity  Detection Method
+  1307→  1307→  ----------------- ------------------------ ----------------- -------------------------
+  1308→  1308→  Network Egress    Monitors all outbound    CRITICAL          eBPF on connect()
+  1309→  1309→  Test              network connections                        syscall + iptables log
+  1310→  1310→                    during model load and                      
+  1311→  1311→                    inference                                  
+  1312→  1312→
+  1313→  1313→  DNS Resolution    Detects any DNS queries  HIGH              Mock DNS server + eBPF on
+  1314→  1314→  Test              made by the model or its                   getaddrinfo()
+  1315→  1315→                    dependencies                               
+  1316→  1316→
+  1317→  1317→  File System       Monitors all file        CRITICAL          eBPF on
+  1318→  1318→  Access Test       reads/writes outside the                   open()/write()/unlink()
+  1319→  1319→                    model's working                            
+  1320→  1320→                    directory                                  
+  1321→  1321→
+  1322→  1322→  Environment       Checks if model accesses HIGH              eBPF on read env + Python
+  1323→  1323→  Variable          env vars beyond allowed                    monkeypatching of
+  1324→  1324→  Exfiltration      list (HOME, PATH,                          os.environ
+  1325→  1325→                    TMPDIR)                                    
+  1326→  1326→
+  1327→  1327→  Process Fork/Exec Detects if the model     CRITICAL          eBPF on
+  1328→  1328→  Test              spawns subprocesses or                     fork()/execve()/clone()
+  1329→  1329→                    executes shell commands                    
+  1330→  1330→
+  1331→  1331→  Memory Bounds     Monitors RSS memory      MEDIUM            cgroup memory
+  1332→  1332→  Test              growth; flags if model                     controller + periodic
+  1333→  1333→                    uses more than 2x                          /proc/self/status read
+  1334→  1334→                    expected RAM                               
+  1335→  1335→
+  1336→  1336→  CPU Timeout Test  Kills model if single    LOW               timerfd + SIGKILL
+  1337→  1337→                    inference call takes                       
+  1338→  1338→                    more than configured                       
+  1339→  1339→                    timeout (default 60s)                      
+  1340→  1340→
+  1341→  1341→  Input Trigger     Sends adversarial inputs CRITICAL          Predefined trigger set +
+  1342→  1342→  Test              (specific byte patterns)                   output diff against
+  1343→  1343→                    to detect hidden                           baseline
+  1344→  1344→                    backdoor triggers                          
+  1345→  1345→
+  1346→  1346→  Output Entropy    Analyzes output          MEDIUM            Shannon entropy
+  1347→  1347→  Test              distribution for                           calculation on output
+  1348→  1348→                    suspiciously uniform or                    tokens/logits
+  1349→  1349→                    constant outputs (model                    
+  1350→  1350→                    collapse)                                  
+  1351→  1351→
+  1352→  1352→  Dependency Import Logs all Python imports  HIGH              Python importlib hook +
+  1353→  1353→  Test              during model load; flags                   allowed import list
+  1354→  1354→                    unexpected/suspicious                      
+  1355→  1355→                    imports                                    
+  1356→  1356→
+  1357→  1357→  Randomness Source Checks if model          HIGH              Python module
+  1358→  1358→  Test              overrides Python's                         monkeypatching detection
+  1359→  1359→                    random/urandom/secrets                     
+  1360→  1360→                    modules                                    
+  1361→  1361→
+  1362→  1362→  Disk Write Test   Measures total bytes     MEDIUM            eBPF write() byte counter
+  1363→  1363→                    written to disk; flags                     
+  1364→  1364→                    if model writes more                       
+  1365→  1365→                    than 10MB                                  
+  1366→  1366→  --------------------------------------------------------------------------------------
+  1367→  1367→
+  1368→  1368→Each test runs sequentially. If a CRITICAL test fails, the remaining
+  1369→  1369→tests are still executed (to gather maximum information) but the overall
+  1370→  1370→sandbox result is marked 'FAILED'. The VM is terminated after all tests
+  1371→  1371→complete or after a hard timeout (configurable, default 10 minutes). The
+  1372→  1372→VM's memory is scrubbed (zeroed) before the Firecracker process exits.
+  1373→  1373→All test results, eBPF event logs, and timing data are aggregated into a
+  1374→  1374→structured JSON result document stored in sandbox_jobs.result_json. This
+  1375→  1375→document is immutable once written and is viewable in the frontend
+  1376→  1376→sandbox results page.
+  1377→  1377→
+  1378→  1378→6.3.3 Sandbox Job Lifecycle
+  1379→  1379→
+  1380→  1380→A sandbox job goes through the following lifecycle states: QUEUED (job
+  1381→  1381→created, waiting for a VM slot), PROVISIONING (Firecracker VM is being
+  1382→  1382→created and the model file is being copied into the VM's rootfs),
+  1383→  1383→RUNNING (all behavioral tests are executing inside the VM), COMPLETED
+  1384→  1384→(all tests finished, results captured, VM terminated), FAILED (VM
+  1385→  1385→crashed, timeout, or internal error), CANCELLED (user cancelled the job
+  1386→  1386→before completion). The sandbox-service maintains a pool of
+  1387→  1387→pre-provisioned VM slots (configurable, default 4 per node) to minimize
+  1388→  1388→provisioning latency. When a job is QUEUED, it is assigned to the next
+  1389→  1389→available slot. If no slot is available within 30 seconds, the job
+  1390→  1390→remains in QUEUED status and the frontend displays a queue position
+  1391→  1391→indicator. The user can cancel a QUEUED or PROVISIONING job, but not a
+  1392→  1392→RUNNING job (they must wait for it to complete). Job lifecycle state
+  1393→  1393→transitions are all recorded in the audit log.
+  1394→  1394→
+  1395→  1395→6.4 Feature 4: Secure Model Artifact Registry
+  1396→  1396→
+  1397→  1397→6.4.1 Registry Design
+  1398→  1398→
+  1399→  1399→The registry is an organization-scoped collection of model artifacts
+  1400→  1400→that have been signed, scanned, and approved for deployment. Each
+  1401→  1401→organization can create one or more registries (e.g., 'production',
+  1402→  1402→'staging', 'development'). Each registry has a deployment policy defined
+  1403→  1403→in OPA (Open Policy Agent) Rego language that specifies the conditions
+  1404→  1404→under which a model version is allowed to be published to that registry.
+  1405→  1405→A deployment policy is a set of rules that are evaluated against the
+  1406→  1406→model's metadata, scan results, signature status, and SBOM findings.
+  1407→  1407→
+  1408→  1408→A typical production registry policy might require: the model must have
+  1409→  1409→a valid signature from an approved signer identity (e.g., any user with
+  1410→  1410→the 'developer' role or higher), the sandbox scan must have completed
+  1411→  1411→with no CRITICAL findings and no more than 2 HIGH findings, the SBOM
+  1412→  1412→must have zero CRITICAL or HIGH CVEs, the model must have been uploaded
+  1413→  1413→by a member who has been in the organization for at least 7 days (to
+  1414→  1414→prevent insider threat from newly invited accounts), and the model
+  1415→  1415→format must be one of the approved formats (safetensors, onnx). If any
+  1416→  1416→of these conditions is not met, the deployment gate returns 'BLOCKED'
+  1417→  1417→with a detailed explanation of which policy rule failed and why.
+  1418→  1418→
+  1419→  1419→6.4.2 Policy Engine
+  1420→  1420→
+  1421→  1421→The policy engine is implemented using OPA (Open Policy Agent) embedded
+  1422→  1422→as a library within the registry-service. Each registry stores its
+  1423→  1423→policy as a Rego document in the database. When a user requests to
+  1424→  1424→publish a model or evaluate a deployment gate, the registry-service
+  1425→  1425→gathers all relevant data (model metadata, signature status, scan
+  1426→  1426→results, SBOM findings, user membership duration, organization settings)
+  1427→  1427→and constructs an input document. This input document is evaluated
+  1428→  1428→against the Rego policy using OPA's Eval function. The policy returns a
+  1429→  1429→decision (ALLOW, DENY) and a list of reasons. The decision, reasons, and
+  1430→  1430→full input document are stored in an immutable policy_evaluation record
+  1431→  1431→in the audit log.
+  1432→  1432→
+  1433→  1433→The OPA policy is exposed in the frontend as a code editor with Rego
+  1434→  1434→syntax highlighting and linting. Admins can write, test, and save
+  1435→  1435→policies directly in the UI. A 'Test Policy' button allows admins to
+  1436→  1436→evaluate a draft policy against a selected model version without
+  1437→  1437→publishing, showing the simulated decision and reasons. This allows
+  1438→  1438→policy authors to iterate on policies safely before they go live. When a
+  1439→  1439→policy is saved, the previous version is archived (never deleted) and
+  1440→  1440→the change is recorded in the audit log with the full before-and-after
+  1441→  1441→Rego source.
+  1442→  1442→
+  1443→  1443→6.5 Feature 5: CI/CD Integration
+  1444→  1444→
+  1445→  1445→6.5.1 GitHub Actions Integration
+  1446→  1446→
+  1447→  1447→ModelVault provides a GitHub Actions composite action
+  1448→  1448→(modelvault/security-scan) that integrates model verification into CI/CD
+  1449→  1449→pipelines. The action is distributed via the GitHub Marketplace and
+  1450→  1450→installed by adding a step to a workflow file. The action authenticates
+  1451→  1451→using an organization API key (stored as a GitHub secret), uploads the
+  1452→  1452→model file to ModelVault, triggers a full scan (SBOM generation +
+  1453→  1453→sandbox behavioral tests), waits for the scan to complete (with
+  1454→  1454→configurable timeout), and checks the scan result. If the scan finds any
+  1455→  1455→CRITICAL issues, the action fails the workflow, preventing the model
+  1456→  1456→from being deployed. If the scan passes, the action returns the model
+  1457→  1457→ID, version ID, and signature URL as outputs that downstream workflow
+  1458→  1458→steps can reference.
+  1459→  1459→
+  1460→  1460→The action supports three modes: 'scan-only' (upload, scan, report
+  1461→  1461→results), 'scan-and-sign' (scan, and if it passes, automatically sign
+  1462→  1462→the model with the CI bot's identity), and 'scan-sign-publish' (scan,
+  1463→  1463→sign, and publish to a specified registry if the deployment gate
+  1464→  1464→passes). The mode is configured via the 'mode' action input parameter.
+  1465→  1465→The action also supports uploading models from specific paths, from
+  1466→  1466→HuggingFace model hub URLs (the action downloads the model from
+  1467→  1467→HuggingFace and uploads it to ModelVault for scanning), and from
+  1468→  1468→S3-compatible storage URLs. All authentication is handled via the
+  1469→  1469→MODELVAULT_API_KEY secret, which is an organization-scoped API key
+  1470→  1470→created in the ModelVault dashboard.
+  1471→  1471→
+  1472→  1472→6.5.2 GitLab CI and Generic Webhook Integration
+  1473→  1473→
+  1474→  1474→For GitLab CI, ModelVault provides a Docker image (modelvault/cli) that
+  1475→  1475→wraps the same functionality as the GitHub Action. The image is used in
+  1476→  1476→a .gitlab-ci.yml job with the same three modes (scan-only,
+  1477→  1477→scan-and-sign, scan-sign-publish). For CI systems that do not support
+  1478→  1478→container-based actions (Jenkins, CircleCI, Buildkite), ModelVault
+  1479→  1479→provides a CLI tool (npm install -g @modelvault/cli) that can be invoked
+  1480→  1480→as a shell command. The CLI authenticates via environment variables
+  1481→  1481→(MODELVAULT_API_KEY, MODELVAULT_API_URL) and provides the same upload,
+  1482→  1482→scan, sign, and publish commands. All CLI commands output structured
+  1483→  1483→JSON for easy parsing by CI scripts.
+  1484→  1484→
+  1485→  1485→6.6 Feature 6: Dashboard and Analytics
+  1486→  1486→
+  1487→  1487→The dashboard provides organization-level visibility into all model
+  1488→  1488→security activities. It displays: total models under management, total
+  1489→  1489→storage used vs. quota, scan pass/fail/warning rates over time (line
+  1490→  1490→chart), most common finding types (bar chart), SBOM vulnerability
+  1491→  1491→severity distribution (donut chart), average sandbox execution time, and
+  1492→  1492→a live activity feed showing recent uploads, scans, signatures, and
+  1493→  1493→policy evaluations. All dashboard data is fetched via dedicated
+  1494→  1494→read-optimized API endpoints that query materialized views in the
+  1495→  1495→database, ensuring fast page loads even for organizations with thousands
+  1496→  1496→of models. The dashboard refreshes automatically every 30 seconds via
+  1497→  1497→polling (no WebSocket complexity). Each chart is interactive: clicking
+  1498→  1498→on a bar or slice navigates to the filtered list view (e.g., clicking
+  1499→  1499→the 'CRITICAL' slice of the vulnerability donut chart navigates to the
+
+[showing lines 1000-1499 of 1787; use offset=1500 with limit to continue reading]

@@ -1,0 +1,708 @@
+$ next dev -p 3000 2>&1 | tee dev.log
+▲ Next.js 16.1.3 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://21.0.4.178:3000
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 1035ms
+○ Compiling / ...
+⨯ ./src/app/page.tsx:11:1
+Export AuditLog doesn't exist in target module
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+> 11 | import { AuditLog } from '@/components/audit-log';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+  14 | export default function HomePage() {
+
+The export AuditLog was not found in module [project]/src/components/audit-log.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:11:1
+Export AuditLog doesn't exist in target module
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+> 11 | import { AuditLog } from '@/components/audit-log';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+  14 | export default function HomePage() {
+
+The export AuditLog was not found in module [project]/src/components/audit-log.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:7:1
+Export Dashboard doesn't exist in target module
+   5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+   6 | import { AppShell } from '@/components/app-shell';
+>  7 | import { Dashboard } from '@/components/dashboard';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+
+The export Dashboard was not found in module [project]/src/components/dashboard.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:7:1
+Export Dashboard doesn't exist in target module
+   5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+   6 | import { AppShell } from '@/components/app-shell';
+>  7 | import { Dashboard } from '@/components/dashboard';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+
+The export Dashboard was not found in module [project]/src/components/dashboard.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:4:1
+Export LandingPage doesn't exist in target module
+  2 |
+  3 | import { useAppStore } from '@/lib/store';
+> 4 | import { LandingPage } from '@/components/landing';
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+  6 | import { AppShell } from '@/components/app-shell';
+  7 | import { Dashboard } from '@/components/dashboard';
+
+The export LandingPage was not found in module [project]/src/components/landing.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:4:1
+Export LandingPage doesn't exist in target module
+  2 |
+  3 | import { useAppStore } from '@/lib/store';
+> 4 | import { LandingPage } from '@/components/landing';
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+  6 | import { AppShell } from '@/components/app-shell';
+  7 | import { Dashboard } from '@/components/dashboard';
+
+The export LandingPage was not found in module [project]/src/components/landing.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:9:1
+Export ModelDetail doesn't exist in target module
+   7 | import { Dashboard } from '@/components/dashboard';
+   8 | import { ModelsList } from '@/components/models-list';
+>  9 | import { ModelDetail } from '@/components/model-detail';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+
+The export ModelDetail was not found in module [project]/src/components/model-detail.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:9:1
+Export ModelDetail doesn't exist in target module
+   7 | import { Dashboard } from '@/components/dashboard';
+   8 | import { ModelsList } from '@/components/models-list';
+>  9 | import { ModelDetail } from '@/components/model-detail';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+
+The export ModelDetail was not found in module [project]/src/components/model-detail.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:8:1
+Export ModelsList doesn't exist in target module
+   6 | import { AppShell } from '@/components/app-shell';
+   7 | import { Dashboard } from '@/components/dashboard';
+>  8 | import { ModelsList } from '@/components/models-list';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+
+The export ModelsList was not found in module [project]/src/components/models-list.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:8:1
+Export ModelsList doesn't exist in target module
+   6 | import { AppShell } from '@/components/app-shell';
+   7 | import { Dashboard } from '@/components/dashboard';
+>  8 | import { ModelsList } from '@/components/models-list';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+
+The export ModelsList was not found in module [project]/src/components/models-list.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:12:1
+Export OrgSettings doesn't exist in target module
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+> 12 | import { OrgSettings } from '@/components/org-settings';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  13 |
+  14 | export default function HomePage() {
+  15 |   const { isAuthenticated, currentPage } = useAppStore();
+
+The export OrgSettings was not found in module [project]/src/components/org-settings.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:12:1
+Export OrgSettings doesn't exist in target module
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+> 12 | import { OrgSettings } from '@/components/org-settings';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  13 |
+  14 | export default function HomePage() {
+  15 |   const { isAuthenticated, currentPage } = useAppStore();
+
+The export OrgSettings was not found in module [project]/src/components/org-settings.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:10:1
+Export Registries doesn't exist in target module
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+> 10 | import { Registries } from '@/components/registries';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+
+The export Registries was not found in module [project]/src/components/registries.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:10:1
+Export Registries doesn't exist in target module
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+> 10 | import { Registries } from '@/components/registries';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+
+The export Registries was not found in module [project]/src/components/registries.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:11:1
+Export AuditLog doesn't exist in target module
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+> 11 | import { AuditLog } from '@/components/audit-log';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+  14 | export default function HomePage() {
+
+The export AuditLog was not found in module [project]/src/components/audit-log.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:11:1
+Export AuditLog doesn't exist in target module
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+> 11 | import { AuditLog } from '@/components/audit-log';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+  14 | export default function HomePage() {
+
+The export AuditLog was not found in module [project]/src/components/audit-log.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:7:1
+Export Dashboard doesn't exist in target module
+   5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+   6 | import { AppShell } from '@/components/app-shell';
+>  7 | import { Dashboard } from '@/components/dashboard';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+
+The export Dashboard was not found in module [project]/src/components/dashboard.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:7:1
+Export Dashboard doesn't exist in target module
+   5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+   6 | import { AppShell } from '@/components/app-shell';
+>  7 | import { Dashboard } from '@/components/dashboard';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+
+The export Dashboard was not found in module [project]/src/components/dashboard.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:4:1
+Export LandingPage doesn't exist in target module
+  2 |
+  3 | import { useAppStore } from '@/lib/store';
+> 4 | import { LandingPage } from '@/components/landing';
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+  6 | import { AppShell } from '@/components/app-shell';
+  7 | import { Dashboard } from '@/components/dashboard';
+
+The export LandingPage was not found in module [project]/src/components/landing.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:4:1
+Export LandingPage doesn't exist in target module
+  2 |
+  3 | import { useAppStore } from '@/lib/store';
+> 4 | import { LandingPage } from '@/components/landing';
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { LoginPage, RegisterPage } from '@/components/auth-pages';
+  6 | import { AppShell } from '@/components/app-shell';
+  7 | import { Dashboard } from '@/components/dashboard';
+
+The export LandingPage was not found in module [project]/src/components/landing.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:9:1
+Export ModelDetail doesn't exist in target module
+   7 | import { Dashboard } from '@/components/dashboard';
+   8 | import { ModelsList } from '@/components/models-list';
+>  9 | import { ModelDetail } from '@/components/model-detail';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+
+The export ModelDetail was not found in module [project]/src/components/model-detail.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:9:1
+Export ModelDetail doesn't exist in target module
+   7 | import { Dashboard } from '@/components/dashboard';
+   8 | import { ModelsList } from '@/components/models-list';
+>  9 | import { ModelDetail } from '@/components/model-detail';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+
+The export ModelDetail was not found in module [project]/src/components/model-detail.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:8:1
+Export ModelsList doesn't exist in target module
+   6 | import { AppShell } from '@/components/app-shell';
+   7 | import { Dashboard } from '@/components/dashboard';
+>  8 | import { ModelsList } from '@/components/models-list';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+
+The export ModelsList was not found in module [project]/src/components/models-list.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:8:1
+Export ModelsList doesn't exist in target module
+   6 | import { AppShell } from '@/components/app-shell';
+   7 | import { Dashboard } from '@/components/dashboard';
+>  8 | import { ModelsList } from '@/components/models-list';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import { ModelDetail } from '@/components/model-detail';
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+
+The export ModelsList was not found in module [project]/src/components/models-list.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:12:1
+Export OrgSettings doesn't exist in target module
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+> 12 | import { OrgSettings } from '@/components/org-settings';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  13 |
+  14 | export default function HomePage() {
+  15 |   const { isAuthenticated, currentPage } = useAppStore();
+
+The export OrgSettings was not found in module [project]/src/components/org-settings.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:12:1
+Export OrgSettings doesn't exist in target module
+  10 | import { Registries } from '@/components/registries';
+  11 | import { AuditLog } from '@/components/audit-log';
+> 12 | import { OrgSettings } from '@/components/org-settings';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  13 |
+  14 | export default function HomePage() {
+  15 |   const { isAuthenticated, currentPage } = useAppStore();
+
+The export OrgSettings was not found in module [project]/src/components/org-settings.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:10:1
+Export Registries doesn't exist in target module
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+> 10 | import { Registries } from '@/components/registries';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+
+The export Registries was not found in module [project]/src/components/registries.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:10:1
+Export Registries doesn't exist in target module
+   8 | import { ModelsList } from '@/components/models-list';
+   9 | import { ModelDetail } from '@/components/model-detail';
+> 10 | import { Registries } from '@/components/registries';
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  11 | import { AuditLog } from '@/components/audit-log';
+  12 | import { OrgSettings } from '@/components/org-settings';
+  13 |
+
+The export Registries was not found in module [project]/src/components/registries.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+500 GET / 500 in 901ms (compile: 785ms, render: 116ms)

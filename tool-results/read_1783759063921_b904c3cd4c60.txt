@@ -1,0 +1,702 @@
+   500→   500→   500→  const [loading, setLoading] = useState(true);
+   501→   501→   501→  const [createOpen, setCreateOpen] = useState(false);
+   502→   502→   502→  const [newKeyName, setNewKeyName] = useState('');
+   503→   503→   503→  const [newKeyExpiry, setNewKeyExpiry] = useState('');
+   504→   504→   504→  const [newKeyPermissions, setNewKeyPermissions] = useState<string[]>([]);
+   505→   505→   505→  const [creating, setCreating] = useState(false);
+   506→   506→   506→  const [createdKey, setCreatedKey] = useState<string | null>(null);
+   507→   507→   507→  const [copied, setCopied] = useState(false);
+   508→   508→   508→  const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
+   509→   509→   509→  const [revoking, setRevoking] = useState(false);
+   510→   510→   510→
+   511→   511→   511→  const fetchKeys = useCallback(async () => {
+   512→   512→   512→    try {
+   513→   513→   513→      const res = await fetch('/api/org/api-keys');
+   514→   514→   514→      const data = await res.json();
+   515→   515→   515→      if (data.items) setKeys(data.items);
+   516→   516→   516→    } catch {
+   517→   517→   517→      toast({ title: 'Failed to load API keys', variant: 'destructive' });
+   518→   518→   518→    } finally {
+   519→   519→   519→      setLoading(false);
+   520→   520→   520→    }
+   521→   521→   521→  }, [toast]);
+   522→   522→   522→
+   523→   523→   523→  useEffect(() => {
+   524→   524→   524→    fetchKeys();
+   525→   525→   525→  }, [fetchKeys]);
+   526→   526→   526→
+   527→   527→   527→  const handleCreate = async () => {
+   528→   528→   528→    if (!newKeyName.trim()) return;
+   529→   529→   529→    setCreating(true);
+   530→   530→   530→    try {
+   531→   531→   531→      const res = await fetch('/api/org/api-keys', {
+   532→   532→   532→        method: 'POST',
+   533→   533→   533→        headers: { 'Content-Type': 'application/json' },
+   534→   534→   534→        body: JSON.stringify({
+   535→   535→   535→          name: newKeyName,
+   536→   536→   536→          expiresAt: newKeyExpiry || null,
+   537→   537→   537→          permissions: newKeyPermissions.length > 0 ? newKeyPermissions : null,
+   538→   538→   538→        }),
+   539→   539→   539→      });
+   540→   540→   540→      if (res.ok) {
+   541→   541→   541→        const data = await res.json();
+   542→   542→   542→        setCreatedKey(data.key);
+   543→   543→   543→        setNewKeyName('');
+   544→   544→   544→        setNewKeyExpiry('');
+   545→   545→   545→        setNewKeyPermissions([]);
+   546→   546→   546→        fetchKeys();
+   547→   547→   547→      } else {
+   548→   548→   548→        const err = await res.json();
+   549→   549→   549→        toast({ title: err.error || 'Failed to create API key', variant: 'destructive' });
+   550→   550→   550→      }
+   551→   551→   551→    } catch {
+   552→   552→   552→      toast({ title: 'Failed to create API key', variant: 'destructive' });
+   553→   553→   553→    } finally {
+   554→   554→   554→      setCreating(false);
+   555→   555→   555→    }
+   556→   556→   556→  };
+   557→   557→   557→
+   558→   558→   558→  const handleCopyKey = () => {
+   559→   559→   559→    if (createdKey) {
+   560→   560→   560→      navigator.clipboard.writeText(createdKey);
+   561→   561→   561→      setCopied(true);
+   562→   562→   562→      setTimeout(() => setCopied(false), 2000);
+   563→   563→   563→    }
+   564→   564→   564→  };
+   565→   565→   565→
+   566→   566→   566→  const handleRevoke = async () => {
+   567→   567→   567→    if (!revokeTarget) return;
+   568→   568→   568→    setRevoking(true);
+   569→   569→   569→    try {
+   570→   570→   570→      const res = await fetch(`/api/org/api-keys/${revokeTarget.id}`, {
+   571→   571→   571→        method: 'DELETE',
+   572→   572→   572→      });
+   573→   573→   573→      if (res.ok) {
+   574→   574→   574→        toast({ title: 'API key revoked successfully' });
+   575→   575→   575→        setRevokeTarget(null);
+   576→   576→   576→        fetchKeys();
+   577→   577→   577→      } else {
+   578→   578→   578→        const err = await res.json();
+   579→   579→   579→        toast({ title: err.error || 'Failed to revoke API key', variant: 'destructive' });
+   580→   580→   580→      }
+   581→   581→   581→    } catch {
+   582→   582→   582→      toast({ title: 'Failed to revoke API key', variant: 'destructive' });
+   583→   583→   583→    } finally {
+   584→   584→   584→      setRevoking(false);
+   585→   585→   585→    }
+   586→   586→   586→  };
+   587→   587→   587→
+   588→   588→   588→  const togglePermission = (perm: string) => {
+   589→   589→   589→    setNewKeyPermissions((prev) =>
+   590→   590→   590→      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+   591→   591→   591→    );
+   592→   592→   592→  };
+   593→   593→   593→
+   594→   594→   594→  return (
+   595→   595→   595→    <div className="space-y-6">
+   596→   596→   596→      <div className="flex items-center justify-between">
+   597→   597→   597→        <p className="text-sm text-muted-foreground">
+   598→   598→   598→          {keys.length} active key{keys.length !== 1 ? 's' : ''}
+   599→   599→   599→        </p>
+   600→   600→   600→        <Button onClick={() => setCreateOpen(true)}>
+   601→   601→   601→          <Plus className="mr-2 h-4 w-4" />
+   602→   602→   602→          Create API Key
+   603→   603→   603→        </Button>
+   604→   604→   604→      </div>
+   605→   605→   605→
+   606→   606→   606→      <div className="rounded-lg border">
+   607→   607→   607→        {loading ? (
+   608→   608→   608→          <div className="space-y-3 p-6">
+   609→   609→   609→            {Array.from({ length: 3 }).map((_, i) => (
+   610→   610→   610→              <div key={i} className="flex items-center gap-4">
+   611→   611→   611→                <Skeleton className="h-4 w-[160px]" />
+   612→   612→   612→                <Skeleton className="h-4 w-[180px]" />
+   613→   613→   613→                <Skeleton className="h-4 w-[100px]" />
+   614→   614→   614→                <Skeleton className="h-4 w-[80px]" />
+   615→   615→   615→              </div>
+   616→   616→   616→            ))}
+   617→   617→   617→          </div>
+   618→   618→   618→        ) : keys.length === 0 ? (
+   619→   619→   619→          <div className="flex flex-col items-center justify-center py-12 text-center">
+   620→   620→   620→            <Key className="mb-3 h-8 w-8 text-muted-foreground/50" />
+   621→   621→   621→            <p className="text-sm text-muted-foreground">No API keys yet.</p>
+   622→   622→   622→            <p className="text-xs text-muted-foreground mb-3">
+   623→   623→   623→              Create an API key to authenticate programmatic access.
+   624→   624→   624→            </p>
+   625→   625→   625→            <Button size="sm" onClick={() => setCreateOpen(true)}>
+   626→   626→   626→              <Plus className="mr-2 h-3 w-3" />
+   627→   627→   627→              Create API Key
+   628→   628→   628→            </Button>
+   629→   629→   629→          </div>
+   630→   630→   630→        ) : (
+   631→   631→   631→          <Table>
+   632→   632→   632→            <TableHeader>
+   633→   633→   633→              <TableRow>
+   634→   634→   634→                <TableHead>Name</TableHead>
+   635→   635→   635→                <TableHead>Key</TableHead>
+   636→   636→   636→                <TableHead>Created</TableHead>
+   637→   637→   637→                <TableHead>Last Used</TableHead>
+   638→   638→   638→                <TableHead>Status</TableHead>
+   639→   639→   639→                <TableHead className="w-[80px]">Actions</TableHead>
+   640→   640→   640→              </TableRow>
+   641→   641→   641→            </TableHeader>
+   642→   642→   642→            <TableBody>
+   643→   643→   643→              {keys.map((key) => (
+   644→   644→   644→                <TableRow key={key.id}>
+   645→   645→   645→                  <TableCell className="font-medium">{key.name}</TableCell>
+   646→   646→   646→                  <TableCell className="font-mono text-xs text-muted-foreground">
+   647→   647→   647→                    {key.keyPrefix}****
+   648→   648→   648→                  </TableCell>
+   649→   649→   649→                  <TableCell className="text-sm text-muted-foreground">
+   650→   650→   650→                    {formatDistanceToNow(new Date(key.createdAt), { addSuffix: true })}
+   651→   651→   651→                  </TableCell>
+   652→   652→   652→                  <TableCell className="text-sm text-muted-foreground">
+   653→   653→   653→                    {key.lastUsedAt
+   654→   654→   654→                      ? formatDistanceToNow(new Date(key.lastUsedAt), { addSuffix: true })
+   655→   655→   655→                      : 'Never'}
+   656→   656→   656→                  </TableCell>
+   657→   657→   657→                  <TableCell>
+   658→   658→   658→                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20">
+   659→   659→   659→                      Active
+   660→   660→   660→                    </Badge>
+   661→   661→   661→                  </TableCell>
+   662→   662→   662→                  <TableCell>
+   663→   663→   663→                    <Button
+   664→   664→   664→                      variant="ghost"
+   665→   665→   665→                      size="icon"
+   666→   666→   666→                      className="h-8 w-8 text-muted-foreground hover:text-red-400"
+   667→   667→   667→                      onClick={() => setRevokeTarget(key)}
+   668→   668→   668→                    >
+   669→   669→   669→                      <Trash2 className="h-4 w-4" />
+   670→   670→   670→                    </Button>
+   671→   671→   671→                  </TableCell>
+   672→   672→   672→                </TableRow>
+   673→   673→   673→              ))}
+   674→   674→   674→            </TableBody>
+   675→   675→   675→          </Table>
+   676→   676→   676→        )}
+   677→   677→   677→      </div>
+   678→   678→   678→
+   679→   679→   679→      {/* Create API Key Dialog */}
+   680→   680→   680→      <Dialog
+   681→   681→   681→        open={createOpen && !createdKey}
+   682→   682→   682→        onOpenChange={(open) => {
+   683→   683→   683→          setCreateOpen(open);
+   684→   684→   684→          if (!open) {
+   685→   685→   685→            setNewKeyName('');
+   686→   686→   686→            setNewKeyExpiry('');
+   687→   687→   687→            setNewKeyPermissions([]);
+   688→   688→   688→          }
+   689→   689→   689→        }}
+   690→   690→   690→      >
+   691→   691→   691→        <DialogContent className="max-w-md">
+   692→   692→   692→          <DialogHeader>
+   693→   693→   693→            <DialogTitle>Create API Key</DialogTitle>
+   694→   694→   694→            <DialogDescription>
+   695→   695→   695→              Generate a new API key for programmatic access.
+   696→   696→   696→            </DialogDescription>
+   697→   697→   697→          </DialogHeader>
+   698→   698→   698→          <div className="space-y-4 py-2">
+   699→   699→   699→            <div className="space-y-2">
+   700→   700→   700→              <Label htmlFor="key-name">Key Name</Label>
+   701→   701→   701→              <Input
+   702→   702→   702→                id="key-name"
+   703→   703→   703→                placeholder="e.g., CI/CD Pipeline Key"
+   704→   704→   704→                value={newKeyName}
+   705→   705→   705→                onChange={(e) => setNewKeyName(e.target.value)}
+   706→   706→   706→              />
+   707→   707→   707→            </div>
+   708→   708→   708→            <div className="space-y-2">
+   709→   709→   709→              <Label htmlFor="key-expiry">Expiration Date</Label>
+   710→   710→   710→              <Input
+   711→   711→   711→                id="key-expiry"
+   712→   712→   712→                type="date"
+   713→   713→   713→                value={newKeyExpiry}
+   714→   714→   714→                onChange={(e) => setNewKeyExpiry(e.target.value)}
+   715→   715→   715→              />
+   716→   716→   716→            </div>
+   717→   717→   717→            <div className="space-y-3">
+   718→   718→   718→              <Label>Permissions</Label>
+   719→   719→   719→              <div className="space-y-2">
+   720→   720→   720→                {PERMISSION_OPTIONS.map((perm) => (
+   721→   721→   721→                  <label
+   722→   722→   722→                    key={perm.value}
+   723→   723→   723→                    className="flex items-center gap-2 cursor-pointer rounded-md border p-3 hover:bg-muted/50 transition-colors"
+   724→   724→   724→                  >
+   725→   725→   725→                    <Checkbox
+   726→   726→   726→                      checked={newKeyPermissions.includes(perm.value)}
+   727→   727→   727→                      onCheckedChange={() => togglePermission(perm.value)}
+   728→   728→   728→                    />
+   729→   729→   729→                    <span className="text-sm">{perm.label}</span>
+   730→   730→   730→                    <span className="ml-auto font-mono text-xs text-muted-foreground">
+   731→   731→   731→                      {perm.value}
+   732→   732→   732→                    </span>
+   733→   733→   733→                  </label>
+   734→   734→   734→                ))}
+   735→   735→   735→              </div>
+   736→   736→   736→            </div>
+   737→   737→   737→          </div>
+   738→   738→   738→          <DialogFooter>
+   739→   739→   739→            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+   740→   740→   740→              Cancel
+   741→   741→   741→            </Button>
+   742→   742→   742→            <Button onClick={handleCreate} disabled={!newKeyName.trim() || creating}>
+   743→   743→   743→              {creating ? 'Creating...' : 'Create Key'}
+   744→   744→   744→            </Button>
+   745→   745→   745→          </DialogFooter>
+   746→   746→   746→        </DialogContent>
+   747→   747→   747→      </Dialog>
+   748→   748→   748→
+   749→   749→   749→      {/* Created Key Display Dialog */}
+   750→   750→   750→      <Dialog
+   751→   751→   751→        open={!!createdKey}
+   752→   752→   752→        onOpenChange={(open) => {
+   753→   753→   753→          if (!open) {
+   754→   754→   754→            setCreatedKey(null);
+   755→   755→   755→            setCreateOpen(false);
+   756→   756→   756→          }
+   757→   757→   757→        }}
+   758→   758→   758→      >
+   759→   759→   759→        <DialogContent className="max-w-md">
+   760→   760→   760→          <DialogHeader>
+   761→   761→   761→            <DialogTitle>API Key Created</DialogTitle>
+   762→   762→   762→            <DialogDescription>
+   763→   763→   763→              Your API key has been generated. Copy it now — it will not be shown again.
+   764→   764→   764→            </DialogDescription>
+   765→   765→   765→          </DialogHeader>
+   766→   766→   766→          <div className="space-y-3">
+   767→   767→   767→            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+   768→   768→   768→              <div className="flex items-start gap-2">
+   769→   769→   769→                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+   770→   770→   770→                <p className="text-sm text-amber-400">
+   771→   771→   771→                  This key will not be shown again. Make sure to copy it and store it securely.
+   772→   772→   772→                </p>
+   773→   773→   773→              </div>
+   774→   774→   774→            </div>
+   775→   775→   775→            <div className="space-y-2">
+   776→   776→   776→              <Label>API Key</Label>
+   777→   777→   777→              <div className="flex items-center gap-2">
+   778→   778→   778→                <Input
+   779→   779→   779→                  value={createdKey || ''}
+   780→   780→   780→                  readOnly
+   781→   781→   781→                  className="font-mono text-xs bg-muted/50"
+   782→   782→   782→                />
+   783→   783→   783→                <Button
+   784→   784→   784→                  variant="outline"
+   785→   785→   785→                  size="icon"
+   786→   786→   786→                  className="shrink-0"
+   787→   787→   787→                  onClick={handleCopyKey}
+   788→   788→   788→                >
+   789→   789→   789→                  {copied ? (
+   790→   790→   790→                    <Check className="h-4 w-4 text-emerald-500" />
+   791→   791→   791→                  ) : (
+   792→   792→   792→                    <Copy className="h-4 w-4" />
+   793→   793→   793→                  )}
+   794→   794→   794→                </Button>
+   795→   795→   795→              </div>
+   796→   796→   796→            </div>
+   797→   797→   797→          </div>
+   798→   798→   798→          <DialogFooter>
+   799→   799→   799→            <Button onClick={() => setCreatedKey(null)}>Done</Button>
+   800→   800→   800→          </DialogFooter>
+   801→   801→   801→        </DialogContent>
+   802→   802→   802→      </Dialog>
+   803→   803→   803→
+   804→   804→   804→      {/* Revoke Key Alert */}
+   805→   805→   805→      <AlertDialog open={!!revokeTarget} onOpenChange={() => setRevokeTarget(null)}>
+   806→   806→   806→        <AlertDialogContent>
+   807→   807→   807→          <AlertDialogHeader>
+   808→   808→   808→            <AlertDialogTitle>Revoke API Key</AlertDialogTitle>
+   809→   809→   809→            <AlertDialogDescription>
+   810→   810→   810→              Are you sure you want to revoke the API key{' '}
+   811→   811→   811→              <span className="font-medium text-foreground">{revokeTarget?.name}</span>?
+   812→   812→   812→              Any applications using this key will lose access immediately.
+   813→   813→   813→            </AlertDialogDescription>
+   814→   814→   814→          </AlertDialogHeader>
+   815→   815→   815→          <AlertDialogFooter>
+   816→   816→   816→            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+   817→   817→   817→            <AlertDialogAction
+   818→   818→   818→              onClick={handleRevoke}
+   819→   819→   819→              disabled={revoking}
+   820→   820→   820→              className="bg-red-600 text-white hover:bg-red-700"
+   821→   821→   821→            >
+   822→   822→   822→              {revoking ? 'Revoking...' : 'Revoke Key'}
+   823→   823→   823→            </AlertDialogAction>
+   824→   824→   824→          </AlertDialogFooter>
+   825→   825→   825→        </AlertDialogContent>
+   826→   826→   826→      </AlertDialog>
+   827→   827→   827→    </div>
+   828→   828→   828→  );
+   829→   829→   829→}
+   830→   830→   830→
+   831→   831→   831→// ── Security Tab ──────────────────────────────────────────────────────────────
+   832→   832→   832→
+   833→   833→   833→interface SsoConfig {
+   834→   834→   834→  provider: string;
+   835→   835→   835→  clientId: string;
+   836→   836→   836→  clientSecret: string;
+   837→   837→   837→  issuerUrl: string;
+   838→   838→   838→  enabled: boolean;
+   839→   839→   839→}
+   840→   840→   840→
+   841→   841→   841→function SecurityTab() {
+   842→   842→   842→  const { toast } = useToast();
+   843→   843→   843→  const [mfaEnabled, setMfaEnabled] = useState(false);
+   844→   844→   844→
+   845→   845→   845→  // SSO state
+   846→   846→   846→  const [ssoConfig, setSsoConfig] = useState<SsoConfig>({
+   847→   847→   847→    provider: 'oidc',
+   848→   848→   848→    clientId: '',
+   849→   849→   849→    clientSecret: '',
+   850→   850→   850→    issuerUrl: '',
+   851→   851→   851→    enabled: false,
+   852→   852→   852→  });
+   853→   853→   853→  const [ssoLoading, setSsoLoading] = useState(true);
+   854→   854→   854→  const [ssoSaving, setSsoSaving] = useState(false);
+   855→   855→   855→  const [oauthDemo, setOAuthDemo] = useState(true);
+   856→   856→   856→
+   857→   857→   857→  const fetchSsoConfig = useCallback(async () => {
+   858→   858→   858→    try {
+   859→   859→   859→      const res = await fetch('/api/org/sso');
+   860→   860→   860→      if (res.ok) {
+   861→   861→   861→        const data = await res.json();
+   862→   862→   862→        setSsoConfig(data);
+   863→   863→   863→      }
+   864→   864→   864→    } catch {
+   865→   865→   865→      toast({ title: 'Failed to load SSO config', variant: 'destructive' });
+   866→   866→   866→    } finally {
+   867→   867→   867→      setSsoLoading(false);
+   868→   868→   868→    }
+   869→   869→   869→  }, [toast]);
+   870→   870→   870→
+   871→   871→   871→  const fetchOAuthStatus = useCallback(async () => {
+   872→   872→   872→    try {
+   873→   873→   873→      const res = await fetch('/api/auth/oauth');
+   874→   874→   874→      if (res.ok) {
+   875→   875→   875→        const data = await res.json();
+   876→   876→   876→        setOAuthDemo(!data.anyConfigured);
+   877→   877→   877→      }
+   878→   878→   878→    } catch {
+   879→   879→   879→      // silent
+   880→   880→   880→    }
+   881→   881→   881→  }, []);
+   882→   882→   882→
+   883→   883→   883→  useEffect(() => {
+   884→   884→   884→    fetchSsoConfig();
+   885→   885→   885→    fetchOAuthStatus();
+   886→   886→   886→  }, [fetchSsoConfig, fetchOAuthStatus]);
+   887→   887→   887→
+   888→   888→   888→  const handleSaveSso = async () => {
+   889→   889→   889→    setSsoSaving(true);
+   890→   890→   890→    try {
+   891→   891→   891→      const res = await fetch('/api/org/sso', {
+   892→   892→   892→        method: 'PUT',
+   893→   893→   893→        headers: { 'Content-Type': 'application/json' },
+   894→   894→   894→        body: JSON.stringify(ssoConfig),
+   895→   895→   895→      });
+   896→   896→   896→      if (!res.ok) {
+   897→   897→   897→        const err = await res.json();
+   898→   898→   898→        toast({ title: err.error || 'Failed to save SSO config', variant: 'destructive' });
+   899→   899→   899→        return;
+   900→   900→   900→      }
+   901→   901→   901→      const updated = await res.json();
+   902→   902→   902→      setSsoConfig(updated);
+   903→   903→   903→      toast({
+   904→   904→   904→        title: 'SSO configuration saved',
+   905→   905→   905→        description: 'Your SSO settings have been updated successfully.',
+   906→   906→   906→      });
+   907→   907→   907→    } catch {
+   908→   908→   908→      toast({ title: 'Failed to save SSO config', variant: 'destructive' });
+   909→   909→   909→    } finally {
+   910→   910→   910→      setSsoSaving(false);
+   911→   911→   911→    }
+   912→   912→   912→  };
+   913→   913→   913→
+   914→   914→   914→  const handleSettingChange = () => {
+   915→   915→   915→    toast({
+   916→   916→   916→      title: 'Settings saved',
+   917→   917→   917→      description: 'Security settings updated successfully.',
+   918→   918→   918→    });
+   919→   919→   919→  };
+   920→   920→   920→
+   921→   921→   921→  const providerLabels: Record<string, string> = {
+   922→   922→   922→    oidc: 'OIDC (Generic)',
+   923→   923→   923→    google: 'Google Workspace',
+   924→   924→   924→    github: 'GitHub Enterprise',
+   925→   925→   925→    saml: 'SAML',
+   926→   926→   926→  };
+   927→   927→   927→
+   928→   928→   928→  return (
+   929→   929→   929→    <div className="space-y-6">
+   930→   930→   930→      {/* SSO Configuration */}
+   931→   931→   931→      <Card>
+   932→   932→   932→        <CardHeader>
+   933→   933→   933→          <div className="flex items-center justify-between">
+   934→   934→   934→            <div className="flex items-center gap-2">
+   935→   935→   935→              <Lock className="h-4 w-4 text-primary" />
+   936→   936→   936→              <CardTitle className="text-base">SSO Configuration</CardTitle>
+   937→   937→   937→            </div>
+   938→   938→   938→            <div className="flex items-center gap-2">
+   939→   939→   939→              {ssoConfig.enabled ? (
+   940→   940→   940→                <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/25 hover:bg-emerald-500/20">
+   941→   941→   941→                  Active
+   942→   942→   942→                </Badge>
+   943→   943→   943→              ) : (
+   944→   944→   944→                <Badge variant="secondary" className="text-muted-foreground">
+   945→   945→   945→                  Disabled
+   946→   946→   946→                </Badge>
+   947→   947→   947→              )}
+   948→   948→   948→              {oauthDemo && (
+   949→   949→   949→                <Badge variant="outline" className="text-amber-600 border-amber-500/40">
+   950→   950→   950→                  Demo Mode
+   951→   951→   951→                </Badge>
+   952→   952→   952→              )}
+   953→   953→   953→            </div>
+   954→   954→   954→          </div>
+   955→   955→   955→          <CardDescription>
+   956→   956→   956→            Configure Single Sign-On for your organization.
+   957→   957→   957→          </CardDescription>
+   958→   958→   958→        </CardHeader>
+   959→   959→   959→        <CardContent className="space-y-4">
+   960→   960→   960→          {ssoLoading ? (
+   961→   961→   961→            <div className="space-y-4">
+   962→   962→   962→              <Skeleton className="h-9 w-full" />
+   963→   963→   963→              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   964→   964→   964→                <Skeleton className="h-9 w-full" />
+   965→   965→   965→                <Skeleton className="h-9 w-full" />
+   966→   966→   966→              </div>
+   967→   967→   967→              <Skeleton className="h-9 w-full" />
+   968→   968→   968→            </div>
+   969→   969→   969→          ) : (
+   970→   970→   970→            <>
+   971→   971→   971→              <div className="flex items-center justify-between rounded-lg border p-4">
+   972→   972→   972→                <div className="space-y-0.5">
+   973→   973→   973→                  <p className="text-sm font-medium">Enable SSO</p>
+   974→   974→   974→                  <p className="text-xs text-muted-foreground">
+   975→   975→   975→                    Allow organization members to sign in with your identity provider
+   976→   976→   976→                  </p>
+   977→   977→   977→                </div>
+   978→   978→   978→                <Switch
+   979→   979→   979→                  checked={ssoConfig.enabled}
+   980→   980→   980→                  onCheckedChange={(checked) =>
+   981→   981→   981→                    setSsoConfig((prev) => ({ ...prev, enabled: checked }))
+   982→   982→   982→                  }
+   983→   983→   983→                />
+   984→   984→   984→              </div>
+   985→   985→   985→
+   986→   986→   986→              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   987→   987→   987→                <div className="space-y-2">
+   988→   988→   988→                  <Label htmlFor="sso-provider">Provider</Label>
+   989→   989→   989→                  <Select
+   990→   990→   990→                    value={ssoConfig.provider}
+   991→   991→   991→                    onValueChange={(value) =>
+   992→   992→   992→                      setSsoConfig((prev) => ({ ...prev, provider: value }))
+   993→   993→   993→                    }
+   994→   994→   994→                  >
+   995→   995→   995→                    <SelectTrigger id="sso-provider">
+   996→   996→   996→                      <SelectValue placeholder="Select provider" />
+   997→   997→   997→                    </SelectTrigger>
+   998→   998→   998→                    <SelectContent>
+   999→   999→   999→                      {Object.entries(providerLabels).map(([key, label]) => (
+  1000→  1000→  1000→                        <SelectItem key={key} value={key}>
+  1001→  1001→  1001→                          {label}
+  1002→  1002→  1002→                        </SelectItem>
+  1003→  1003→  1003→                      ))}
+  1004→  1004→  1004→                    </SelectContent>
+  1005→  1005→  1005→                  </Select>
+  1006→  1006→  1006→                </div>
+  1007→  1007→  1007→                <div className="space-y-2">
+  1008→  1008→  1008→                  <Label htmlFor="sso-client-id">Client ID</Label>
+  1009→  1009→  1009→                  <Input
+  1010→  1010→  1010→                    id="sso-client-id"
+  1011→  1011→  1011→                    value={ssoConfig.clientId}
+  1012→  1012→  1012→                    onChange={(e) =>
+  1013→  1013→  1013→                      setSsoConfig((prev) => ({ ...prev, clientId: e.target.value }))
+  1014→  1014→  1014→                    }
+  1015→  1015→  1015→                    placeholder="Enter client ID"
+  1016→  1016→  1016→                    className="font-mono"
+  1017→  1017→  1017→                  />
+  1018→  1018→  1018→                </div>
+  1019→  1019→  1019→                <div className="space-y-2">
+  1020→  1020→  1020→                  <Label htmlFor="sso-client-secret">Client Secret</Label>
+  1021→  1021→  1021→                  <div className="flex items-center gap-2">
+  1022→  1022→  1022→                    <Input
+  1023→  1023→  1023→                      id="sso-client-secret"
+  1024→  1024→  1024→                      type="password"
+  1025→  1025→  1025→                      value={ssoConfig.clientSecret}
+  1026→  1026→  1026→                      onChange={(e) =>
+  1027→  1027→  1027→                        setSsoConfig((prev) => ({ ...prev, clientSecret: e.target.value }))
+  1028→  1028→  1028→                      }
+  1029→  1029→  1029→                      placeholder="Enter client secret"
+  1030→  1030→  1030→                      className="font-mono"
+  1031→  1031→  1031→                    />
+  1032→  1032→  1032→                    <Tooltip>
+  1033→  1033→  1033→                      <TooltipTrigger asChild>
+  1034→  1034→  1034→                        <Button
+  1035→  1035→  1035→                          variant="outline"
+  1036→  1036→  1036→                          size="icon"
+  1037→  1037→  1037→                          className="shrink-0"
+  1038→  1038→  1038→                          onClick={() => {
+  1039→  1039→  1039→                            navigator.clipboard.writeText(ssoConfig.clientSecret);
+  1040→  1040→  1040→                            toast({ title: 'Copied to clipboard' });
+  1041→  1041→  1041→                          }}
+  1042→  1042→  1042→                        >
+  1043→  1043→  1043→                          <Copy className="h-4 w-4" />
+  1044→  1044→  1044→                        </Button>
+  1045→  1045→  1045→                      </TooltipTrigger>
+  1046→  1046→  1046→                      <TooltipContent>Copy Client Secret</TooltipContent>
+  1047→  1047→  1047→                    </Tooltip>
+  1048→  1048→  1048→                  </div>
+  1049→  1049→  1049→                </div>
+  1050→  1050→  1050→                <div className="space-y-2">
+  1051→  1051→  1051→                  <Label htmlFor="sso-issuer-url">Issuer URL</Label>
+  1052→  1052→  1052→                  <Input
+  1053→  1053→  1053→                    id="sso-issuer-url"
+  1054→  1054→  1054→                    value={ssoConfig.issuerUrl}
+  1055→  1055→  1055→                    onChange={(e) =>
+  1056→  1056→  1056→                      setSsoConfig((prev) => ({ ...prev, issuerUrl: e.target.value }))
+  1057→  1057→  1057→                    }
+  1058→  1058→  1058→                    placeholder="https://your-idp.example.com/oauth2/default"
+  1059→  1059→  1059→                    className="font-mono text-xs"
+  1060→  1060→  1060→                  />
+  1061→  1061→  1061→                </div>
+  1062→  1062→  1062→              </div>
+  1063→  1063→  1063→
+  1064→  1064→  1064→              <div className="flex items-center justify-end">
+  1065→  1065→  1065→                <Button onClick={handleSaveSso} disabled={ssoSaving}>
+  1066→  1066→  1066→                  {ssoSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+  1067→  1067→  1067→                  Save SSO Configuration
+  1068→  1068→  1068→                </Button>
+  1069→  1069→  1069→              </div>
+  1070→  1070→  1070→            </>
+  1071→  1071→  1071→          )}
+  1072→  1072→  1072→        </CardContent>
+  1073→  1073→  1073→      </Card>
+  1074→  1074→  1074→
+  1075→  1075→  1075→      {/* MFA Enforcement */}
+  1076→  1076→  1076→      <Card>
+  1077→  1077→  1077→        <CardHeader>
+  1078→  1078→  1078→          <div className="flex items-center gap-2">
+  1079→  1079→  1079→            <Shield className="h-4 w-4 text-primary" />
+  1080→  1080→  1080→            <CardTitle className="text-base">Multi-Factor Authentication</CardTitle>
+  1081→  1081→  1081→          </div>
+  1082→  1082→  1082→          <CardDescription>
+  1083→  1083→  1083→            Enforce MFA for all organization members.
+  1084→  1084→  1084→          </CardDescription>
+  1085→  1085→  1085→        </CardHeader>
+  1086→  1086→  1086→        <CardContent>
+  1087→  1087→  1087→          <div className="flex items-center justify-between rounded-lg border p-4">
+  1088→  1088→  1088→            <div className="space-y-0.5">
+  1089→  1089→  1089→              <p className="text-sm font-medium">MFA Enforcement</p>
+  1090→  1090→  1090→              <p className="text-xs text-muted-foreground">
+  1091→  1091→  1091→                Require all members to use multi-factor authentication
+  1092→  1092→  1092→              </p>
+  1093→  1093→  1093→            </div>
+  1094→  1094→  1094→            <Switch
+  1095→  1095→  1095→              checked={mfaEnabled}
+  1096→  1096→  1096→              onCheckedChange={(checked) => {
+  1097→  1097→  1097→                setMfaEnabled(checked);
+  1098→  1098→  1098→                handleSettingChange();
+  1099→  1099→  1099→              }}
+  1100→  1100→  1100→            />
+  1101→  1101→  1101→          </div>
+  1102→  1102→  1102→        </CardContent>
+  1103→  1103→  1103→      </Card>
+  1104→  1104→  1104→
+  1105→  1105→  1105→      {/* Session Management */}
+  1106→  1106→  1106→      <Card>
+  1107→  1107→  1107→        <CardHeader>
+  1108→  1108→  1108→          <div className="flex items-center gap-2">
+  1109→  1109→  1109→            <Clock className="h-4 w-4 text-primary" />
+  1110→  1110→  1110→            <CardTitle className="text-base">Session Management</CardTitle>
+  1111→  1111→  1111→          </div>
+  1112→  1112→  1112→          <CardDescription>
+  1113→  1113→  1113→            Configure session settings for your organization.
+  1114→  1114→  1114→          </CardDescription>
+  1115→  1115→  1115→        </CardHeader>
+  1116→  1116→  1116→        <CardContent className="space-y-4">
+  1117→  1117→  1117→          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+  1118→  1118→  1118→            <div className="space-y-2">
+  1119→  1119→  1119→              <Label>Default Session Duration</Label>
+  1120→  1120→  1120→              <Input value="24 hours" readOnly className="bg-muted/50" />
+  1121→  1121→  1121→            </div>
+  1122→  1122→  1122→            <div className="space-y-2">
+  1123→  1123→  1123→              <Label>Max Concurrent Sessions</Label>
+  1124→  1124→  1124→              <Input value="5 per user" readOnly className="bg-muted/50" />
+  1125→  1125→  1125→            </div>
+  1126→  1126→  1126→          </div>
+  1127→  1127→  1127→          <p className="text-xs text-muted-foreground">
+  1128→  1128→  1128→            Session settings can be configured by organization administrators.
+  1129→  1129→  1129→          </p>
+  1130→  1130→  1130→        </CardContent>
+  1131→  1131→  1131→      </Card>
+  1132→  1132→  1132→    </div>
+  1133→  1133→  1133→  );
+  1134→  1134→  1134→}
+  1135→  1135→  1135→
+  1136→  1136→  1136→// ── Main Component ────────────────────────────────────────────────────────────
+  1137→  1137→  1137→
+  1138→  1138→  1138→export default function OrgSettingsPage() {
+  1139→  1139→  1139→  const { toast } = useToast();
+  1140→  1140→  1140→  const [org, setOrg] = useState<OrgData | null>(null);
+  1141→  1141→  1141→  const [loading, setLoading] = useState(true);
+  1142→  1142→  1142→
+  1143→  1143→  1143→  const fetchOrg = useCallback(async () => {
+  1144→  1144→  1144→    try {
+  1145→  1145→  1145→      const res = await fetch('/api/org');
+  1146→  1146→  1146→      if (res.ok) {
+  1147→  1147→  1147→        const data = await res.json();
+  1148→  1148→  1148→        setOrg(data);
+  1149→  1149→  1149→      }
+  1150→  1150→  1150→    } catch {
+  1151→  1151→  1151→      toast({ title: 'Failed to load organization', variant: 'destructive' });
+  1152→  1152→  1152→    } finally {
+  1153→  1153→  1153→      setLoading(false);
+  1154→  1154→  1154→    }
+  1155→  1155→  1155→  }, [toast]);
+  1156→  1156→  1156→
+  1157→  1157→  1157→  useEffect(() => {
+  1158→  1158→  1158→    fetchOrg();
+  1159→  1159→  1159→  }, [fetchOrg]);
+  1160→  1160→  1160→
+  1161→  1161→  1161→  return (
+  1162→  1162→  1162→    <div className="space-y-6">
+  1163→  1163→  1163→      {/* Header */}
+  1164→  1164→  1164→      <div className="flex items-center gap-3">
+  1165→  1165→  1165→        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+  1166→  1166→  1166→          <Settings className="h-5 w-5 text-primary" />
+  1167→  1167→  1167→        </div>
+  1168→  1168→  1168→        <div>
+  1169→  1169→  1169→          <h1 className="text-2xl font-bold tracking-tight">Organization Settings</h1>
+  1170→  1170→  1170→          <p className="text-sm text-muted-foreground">
+  1171→  1171→  1171→            Manage your organization, members, and security
+  1172→  1172→  1172→          </p>
+  1173→  1173→  1173→        </div>
+  1174→  1174→  1174→      </div>
+  1175→  1175→  1175→
+  1176→  1176→  1176→      {/* Tabs */}
+  1177→  1177→  1177→      <Tabs defaultValue="general" className="space-y-6">
+  1178→  1178→  1178→        <TabsList>
+  1179→  1179→  1179→          <TabsTrigger value="general" className="gap-1.5">
+  1180→  1180→  1180→            <Settings className="h-3.5 w-3.5" />
+  1181→  1181→  1181→            General
+  1182→  1182→  1182→          </TabsTrigger>
+  1183→  1183→  1183→          <TabsTrigger value="members" className="gap-1.5">
+  1184→  1184→  1184→            <Users className="h-3.5 w-3.5" />
+  1185→  1185→  1185→            Members
+  1186→  1186→  1186→          </TabsTrigger>
+  1187→  1187→  1187→          <TabsTrigger value="api-keys" className="gap-1.5">
+  1188→  1188→  1188→            <Key className="h-3.5 w-3.5" />
+  1189→  1189→  1189→            API Keys
+  1190→  1190→  1190→          </TabsTrigger>
+  1191→  1191→  1191→          <TabsTrigger value="security" className="gap-1.5">
+  1192→  1192→  1192→            <Shield className="h-3.5 w-3.5" />
+  1193→  1193→  1193→            Security
+  1194→  1194→  1194→          </TabsTrigger>
+  1195→  1195→  1195→        </TabsList>
+  1196→  1196→  1196→
+  1197→  1197→  1197→        <TabsContent value="general">
+  1198→  1198→  1198→          <GeneralTab org={org} loading={loading} />
+  1199→  1199→  1199→        </TabsContent>
+
+[showing lines 500-1199 of 1215; use offset=1200 with limit to continue reading]

@@ -1,0 +1,1044 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback } from 'react';
+     4→     4→import { useAppStore } from '@/lib/store';
+     5→     5→import { useToast } from '@/hooks/use-toast';
+     6→     6→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+     7→     7→import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+     8→     8→import { Button } from '@/components/ui/button';
+     9→     9→import { Input } from '@/components/ui/input';
+    10→    10→import { Label } from '@/components/ui/label';
+    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→import { Separator } from '@/components/ui/separator';
+    13→    13→import { Switch } from '@/components/ui/switch';
+    14→    14→import { Progress } from '@/components/ui/progress';
+    15→    15→import { Skeleton } from '@/components/ui/skeleton';
+    16→    16→import { Checkbox } from '@/components/ui/checkbox';
+    17→    17→import {
+    18→    18→  Table,
+    19→    19→  TableHeader,
+    20→    20→  TableRow,
+    21→    21→  TableHead,
+    22→    22→  TableBody,
+    23→    23→  TableCell,
+    24→    24→} from '@/components/ui/table';
+    25→    25→import {
+    26→    26→  Dialog,
+    27→    27→  DialogContent,
+    28→    28→  DialogHeader,
+    29→    29→  DialogTitle,
+    30→    30→  DialogDescription,
+    31→    31→  DialogFooter,
+    32→    32→} from '@/components/ui/dialog';
+    33→    33→import {
+    34→    34→  AlertDialog,
+    35→    35→  AlertDialogAction,
+    36→    36→  AlertDialogCancel,
+    37→    37→  AlertDialogContent,
+    38→    38→  AlertDialogDescription,
+    39→    39→  AlertDialogFooter,
+    40→    40→  AlertDialogHeader,
+    41→    41→  AlertDialogTitle,
+    42→    42→} from '@/components/ui/alert-dialog';
+    43→    43→import {
+    44→    44→  Select,
+    45→    45→  SelectContent,
+    46→    46→  SelectItem,
+    47→    47→  SelectTrigger,
+    48→    48→  SelectValue,
+    49→    49→} from '@/components/ui/select';
+    50→    50→import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+    51→    51→import {
+    52→    52→  Users,
+    53→    53→  Key,
+    54→    54→  Shield,
+    55→    55→  Settings,
+    56→    56→  Plus,
+    57→    57→  Trash2,
+    58→    58→  Copy,
+    59→    59→  Check,
+    60→    60→  ExternalLink,
+    61→    61→  AlertTriangle,
+    62→    62→  Lock,
+    63→    63→  Clock,
+    64→    64→  UserPlus,
+    65→    65→} from 'lucide-react';
+    66→    66→import { formatDistanceToNow } from 'date-fns';
+    67→    67→
+    68→    68→// ── Types ─────────────────────────────────────────────────────────────────────
+    69→    69→
+    70→    70→interface OrgData {
+    71→    71→  id: string;
+    72→    72→  name: string;
+    73→    73→  slug: string;
+    74→    74→  plan: string;
+    75→    75→  storageQuotaBytes: number;
+    76→    76→  storageUsedBytes: number;
+    77→    77→  maxMembers: number;
+    78→    78→  createdAt: string;
+    79→    79→  updatedAt: string;
+    80→    80→  stats: {
+    81→    81→    memberCount: number;
+    82→    82→    modelCount: number;
+    83→    83→    storageUsed: number;
+    84→    84→    storageQuota: number;
+    85→    85→    storagePercent: number;
+    86→    86→  };
+    87→    87→}
+    88→    88→
+    89→    89→interface Member {
+    90→    90→  id: string;
+    91→    91→  orgId: string;
+    92→    92→  userId: string;
+    93→    93→  role: string;
+    94→    94→  acceptedAt: string | null;
+    95→    95→  createdAt: string;
+    96→    96→  user: {
+    97→    97→    id: string;
+    98→    98→    email: string;
+    99→    99→    name: string;
+   100→   100→    avatarUrl: string | null;
+   101→   101→  };
+   102→   102→}
+   103→   103→
+   104→   104→interface ApiKey {
+   105→   105→  id: string;
+   106→   106→  name: string;
+   107→   107→  keyPrefix: string;
+   108→   108→  permissions: string | null;
+   109→   109→  expiresAt: string | null;
+   110→   110→  lastUsedAt: string | null;
+   111→   111→  createdAt: string;
+   112→   112→}
+   113→   113→
+   114→   114→// ── Helpers ───────────────────────────────────────────────────────────────────
+   115→   115→
+   116→   116→function formatBytes(bytes: number): string {
+   117→   117→  if (bytes === 0) return '0 B';
+   118→   118→  const k = 1024;
+   119→   119→  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+   120→   120→  const i = Math.floor(Math.log(bytes) / Math.log(k));
+   121→   121→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+   122→   122→}
+   123→   123→
+   124→   124→function maskKey(prefix: string): string {
+   125→   125→  if (!prefix) return 'mv_sk_****';
+   126→   126→  return prefix + '****' + Math.random().toString(36).slice(2, 6);
+   127→   127→}
+   128→   128→
+   129→   129→const PERMISSION_OPTIONS = [
+   130→   130→  { value: 'model:upload', label: 'Upload Models' },
+   131→   131→  { value: 'model:read', label: 'Read Models' },
+   132→   132→  { value: 'model:sign', label: 'Sign Models' },
+   133→   133→  { value: 'registry:publish', label: 'Publish to Registry' },
+   134→   134→  { value: 'audit:read', label: 'Read Audit Logs' },
+   135→   135→];
+   136→   136→
+   137→   137→const ROLE_OPTIONS = [
+   138→   138→  { value: 'owner', label: 'Owner' },
+   139→   139→  { value: 'admin', label: 'Admin' },
+   140→   140→  { value: 'developer', label: 'Developer' },
+   141→   141→  { value: 'viewer', label: 'Viewer' },
+   142→   142→];
+   143→   143→
+   144→   144→function getRoleBadgeColor(role: string) {
+   145→   145→  switch (role) {
+   146→   146→    case 'owner':
+   147→   147→      return 'bg-amber-500/15 text-amber-400 border-amber-500/20';
+   148→   148→    case 'admin':
+   149→   149→      return 'bg-violet-500/15 text-violet-400 border-violet-500/20';
+   150→   150→    case 'developer':
+   151→   151→      return 'bg-sky-500/15 text-sky-400 border-sky-500/20';
+   152→   152→    default:
+   153→   153→      return 'bg-muted text-muted-foreground border-border';
+   154→   154→  }
+   155→   155→}
+   156→   156→
+   157→   157→// ── General Tab ───────────────────────────────────────────────────────────────
+   158→   158→
+   159→   159→function GeneralTab({ org, loading }: { org: OrgData | null; loading: boolean }) {
+   160→   160→  if (loading) {
+   161→   161→    return (
+   162→   162→      <div className="space-y-6">
+   163→   163→        {Array.from({ length: 4 }).map((_, i) => (
+   164→   164→          <div key={i} className="space-y-2">
+   165→   165→            <Skeleton className="h-4 w-24" />
+   166→   166→            <Skeleton className="h-9 w-80" />
+   167→   167→          </div>
+   168→   168→        ))}
+   169→   169→      </div>
+   170→   170→    );
+   171→   171→  }
+   172→   172→
+   173→   173→  if (!org) return null;
+   174→   174→
+   175→   175→  return (
+   176→   176→    <div className="space-y-6">
+   177→   177→      <Card>
+   178→   178→        <CardHeader>
+   179→   179→          <CardTitle className="text-base">Organization Info</CardTitle>
+   180→   180→          <CardDescription>Basic information about your organization.</CardDescription>
+   181→   181→        </CardHeader>
+   182→   182→        <CardContent className="space-y-4">
+   183→   183→          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   184→   184→            <div className="space-y-2">
+   185→   185→              <Label>Organization Name</Label>
+   186→   186→              <Input value={org.name} readOnly className="bg-muted/50" />
+   187→   187→            </div>
+   188→   188→            <div className="space-y-2">
+   189→   189→              <Label>Slug</Label>
+   190→   190→              <Input value={org.slug} readOnly className="bg-muted/50 font-mono" />
+   191→   191→            </div>
+   192→   192→          </div>
+   193→   193→          <div className="space-y-2">
+   194→   194→            <Label>Plan Tier</Label>
+   195→   195→            <div className="flex items-center gap-3">
+   196→   196→              <Input
+   197→   197→                value={org.plan.charAt(0).toUpperCase() + org.plan.slice(1)}
+   198→   198→                readOnly
+   199→   199→                className="bg-muted/50 max-w-[200px]"
+   200→   200→              />
+   201→   201→              <Badge variant="outline" className="border-amber-500/30 text-amber-400">
+   202→   202→                <ExternalLink className="mr-1 h-3 w-3" />
+   203→   203→                Contact Sales
+   204→   204→              </Badge>
+   205→   205→            </div>
+   206→   206→          </div>
+   207→   207→        </CardContent>
+   208→   208→      </Card>
+   209→   209→
+   210→   210→      <Card>
+   211→   211→        <CardHeader>
+   212→   212→          <CardTitle className="text-base">Storage Usage</CardTitle>
+   213→   213→          <CardDescription>
+   214→   214→            {formatBytes(org.stats.storageUsed)} of {formatBytes(org.stats.storageQuota)} used
+   215→   215→          </CardDescription>
+   216→   216→        </CardHeader>
+   217→   217→        <CardContent className="space-y-3">
+   218→   218→          <Progress value={org.stats.storagePercent} className="h-3" />
+   219→   219→          <div className="flex items-center justify-between text-sm">
+   220→   220→            <span className="text-muted-foreground">{org.stats.storagePercent}% used</span>
+   221→   221→            <span className="text-muted-foreground">
+   222→   222→              {formatBytes(org.stats.storageQuota - org.stats.storageUsed)} available
+   223→   223→            </span>
+   224→   224→          </div>
+   225→   225→        </CardContent>
+   226→   226→      </Card>
+   227→   227→    </div>
+   228→   228→  );
+   229→   229→}
+   230→   230→
+   231→   231→// ── Members Tab ───────────────────────────────────────────────────────────────
+   232→   232→
+   233→   233→function MembersTab() {
+   234→   234→  const { user } = useAppStore();
+   235→   235→  const { toast } = useToast();
+   236→   236→  const [members, setMembers] = useState<Member[]>([]);
+   237→   237→  const [loading, setLoading] = useState(true);
+   238→   238→  const [inviteOpen, setInviteOpen] = useState(false);
+   239→   239→  const [inviteEmail, setInviteEmail] = useState('');
+   240→   240→  const [inviteRole, setInviteRole] = useState('viewer');
+   241→   241→  const [inviting, setInviting] = useState(false);
+   242→   242→  const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
+   243→   243→  const [removing, setRemoving] = useState(false);
+   244→   244→  const [changingRole, setChangingRole] = useState<string | null>(null);
+   245→   245→
+   246→   246→  const fetchMembers = useCallback(async () => {
+   247→   247→    try {
+   248→   248→      const res = await fetch('/api/org/members');
+   249→   249→      const data = await res.json();
+   250→   250→      if (data.items) setMembers(data.items);
+   251→   251→    } catch {
+   252→   252→      toast({ title: 'Failed to load members', variant: 'destructive' });
+   253→   253→    } finally {
+   254→   254→      setLoading(false);
+   255→   255→    }
+   256→   256→  }, [toast]);
+   257→   257→
+   258→   258→  useEffect(() => {
+   259→   259→    fetchMembers();
+   260→   260→  }, [fetchMembers]);
+   261→   261→
+   262→   262→  const handleInvite = async () => {
+   263→   263→    if (!inviteEmail.trim()) return;
+   264→   264→    setInviting(true);
+   265→   265→    try {
+   266→   266→      const res = await fetch('/api/org/members', {
+   267→   267→        method: 'POST',
+   268→   268→        headers: { 'Content-Type': 'application/json' },
+   269→   269→        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+   270→   270→      });
+   271→   271→      if (res.ok) {
+   272→   272→        toast({ title: 'Member invited successfully' });
+   273→   273→        setInviteOpen(false);
+   274→   274→        setInviteEmail('');
+   275→   275→        setInviteRole('viewer');
+   276→   276→        fetchMembers();
+   277→   277→      } else {
+   278→   278→        const err = await res.json();
+   279→   279→        toast({ title: err.error || 'Failed to invite member', variant: 'destructive' });
+   280→   280→      }
+   281→   281→    } catch {
+   282→   282→      toast({ title: 'Failed to invite member', variant: 'destructive' });
+   283→   283→    } finally {
+   284→   284→      setInviting(false);
+   285→   285→    }
+   286→   286→  };
+   287→   287→
+   288→   288→  const handleRoleChange = async (memberId: string, newRole: string) => {
+   289→   289→    setChangingRole(memberId);
+   290→   290→    try {
+   291→   291→      const res = await fetch(`/api/org/members/${memberId}`, {
+   292→   292→        method: 'PATCH',
+   293→   293→        headers: { 'Content-Type': 'application/json' },
+   294→   294→        body: JSON.stringify({ role: newRole }),
+   295→   295→      });
+   296→   296→      if (res.ok) {
+   297→   297→        toast({ title: 'Role updated successfully' });
+   298→   298→        fetchMembers();
+   299→   299→      } else {
+   300→   300→        const err = await res.json();
+   301→   301→        toast({ title: err.error || 'Failed to update role', variant: 'destructive' });
+   302→   302→      }
+   303→   303→    } catch {
+   304→   304→      toast({ title: 'Failed to update role', variant: 'destructive' });
+   305→   305→    } finally {
+   306→   306→      setChangingRole(null);
+   307→   307→    }
+   308→   308→  };
+   309→   309→
+   310→   310→  const handleRemove = async () => {
+   311→   311→    if (!removeTarget) return;
+   312→   312→    setRemoving(true);
+   313→   313→    try {
+   314→   314→      const res = await fetch(`/api/org/members/${removeTarget.id}`, {
+   315→   315→        method: 'DELETE',
+   316→   316→      });
+   317→   317→      if (res.ok) {
+   318→   318→        toast({ title: 'Member removed successfully' });
+   319→   319→        setRemoveTarget(null);
+   320→   320→        fetchMembers();
+   321→   321→      } else {
+   322→   322→        const err = await res.json();
+   323→   323→        toast({ title: err.error || 'Failed to remove member', variant: 'destructive' });
+   324→   324→      }
+   325→   325→    } catch {
+   326→   326→      toast({ title: 'Failed to remove member', variant: 'destructive' });
+   327→   327→    } finally {
+   328→   328→      setRemoving(false);
+   329→   329→    }
+   330→   330→  };
+   331→   331→
+   332→   332→  const isOwner = user?.role === 'owner';
+   333→   333→
+   334→   334→  return (
+   335→   335→    <div className="space-y-6">
+   336→   336→      <div className="flex items-center justify-between">
+   337→   337→        <div>
+   338→   338→          <p className="text-sm text-muted-foreground">
+   339→   339→            {members.length} member{members.length !== 1 ? 's' : ''}
+   340→   340→          </p>
+   341→   341→        </div>
+   342→   342→        <Button onClick={() => setInviteOpen(true)}>
+   343→   343→          <UserPlus className="mr-2 h-4 w-4" />
+   344→   344→          Invite Member
+   345→   345→        </Button>
+   346→   346→      </div>
+   347→   347→
+   348→   348→      <div className="rounded-lg border">
+   349→   349→        {loading ? (
+   350→   350→          <div className="space-y-3 p-6">
+   351→   351→            {Array.from({ length: 4 }).map((_, i) => (
+   352→   352→              <div key={i} className="flex items-center gap-4">
+   353→   353→                <Skeleton className="h-8 w-8 rounded-full" />
+   354→   354→                <Skeleton className="h-4 w-[160px]" />
+   355→   355→                <Skeleton className="h-4 w-[200px]" />
+   356→   356→                <Skeleton className="h-4 w-[80px]" />
+   357→   357→              </div>
+   358→   358→            ))}
+   359→   359→          </div>
+   360→   360→        ) : (
+   361→   361→          <Table>
+   362→   362→            <TableHeader>
+   363→   363→              <TableRow>
+   364→   364→                <TableHead>Name</TableHead>
+   365→   365→                <TableHead>Email</TableHead>
+   366→   366→                <TableHead>Role</TableHead>
+   367→   367→                <TableHead>Joined</TableHead>
+   368→   368→                <TableHead className="w-[80px]">Actions</TableHead>
+   369→   369→              </TableRow>
+   370→   370→            </TableHeader>
+   371→   371→            <TableBody>
+   372→   372→              {members.map((member) => (
+   373→   373→                <TableRow key={member.id}>
+   374→   374→                  <TableCell className="font-medium">{member.user.name}</TableCell>
+   375→   375→                  <TableCell className="text-sm text-muted-foreground">
+   376→   376→                    {member.user.email}
+   377→   377→                  </TableCell>
+   378→   378→                  <TableCell>
+   379→   379→                    <Select
+   380→   380→                      value={member.role}
+   381→   381→                      onValueChange={(v) => handleRoleChange(member.id, v)}
+   382→   382→                      disabled={!isOwner || changingRole === member.id}
+   383→   383→                    >
+   384→   384→                      <SelectTrigger className={`h-7 w-[130px] text-xs ${getRoleBadgeColor(member.role)} border-transparent`}>
+   385→   385→                        <SelectValue />
+   386→   386→                      </SelectTrigger>
+   387→   387→                      <SelectContent>
+   388→   388→                        {ROLE_OPTIONS.map((opt) => (
+   389→   389→                          <SelectItem key={opt.value} value={opt.value}>
+   390→   390→                            {opt.label}
+   391→   391→                          </SelectItem>
+   392→   392→                        ))}
+   393→   393→                      </SelectContent>
+   394→   394→                    </Select>
+   395→   395→                  </TableCell>
+   396→   396→                  <TableCell className="text-sm text-muted-foreground">
+   397→   397→                    {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
+   398→   398→                  </TableCell>
+   399→   399→                  <TableCell>
+   400→   400→                    {isOwner && member.role !== 'owner' && (
+   401→   401→                      <Button
+   402→   402→                        variant="ghost"
+   403→   403→                        size="icon"
+   404→   404→                        className="h-8 w-8 text-muted-foreground hover:text-red-400"
+   405→   405→                        onClick={() => setRemoveTarget(member)}
+   406→   406→                      >
+   407→   407→                        <Trash2 className="h-4 w-4" />
+   408→   408→                      </Button>
+   409→   409→                    )}
+   410→   410→                  </TableCell>
+   411→   411→                </TableRow>
+   412→   412→              ))}
+   413→   413→            </TableBody>
+   414→   414→          </Table>
+   415→   415→        )}
+   416→   416→      </div>
+   417→   417→
+   418→   418→      {/* Invite Member Dialog */}
+   419→   419→      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+   420→   420→        <DialogContent className="max-w-md">
+   421→   421→          <DialogHeader>
+   422→   422→            <DialogTitle>Invite Member</DialogTitle>
+   423→   423→            <DialogDescription>
+   424→   424→              Add a new member to your organization.
+   425→   425→            </DialogDescription>
+   426→   426→          </DialogHeader>
+   427→   427→          <div className="space-y-4 py-2">
+   428→   428→            <div className="space-y-2">
+   429→   429→              <Label htmlFor="invite-email">Email</Label>
+   430→   430→              <Input
+   431→   431→                id="invite-email"
+   432→   432→                type="email"
+   433→   433→                placeholder="user@example.com"
+   434→   434→                value={inviteEmail}
+   435→   435→                onChange={(e) => setInviteEmail(e.target.value)}
+   436→   436→              />
+   437→   437→            </div>
+   438→   438→            <div className="space-y-2">
+   439→   439→              <Label>Role</Label>
+   440→   440→              <Select value={inviteRole} onValueChange={setInviteRole}>
+   441→   441→                <SelectTrigger className="w-full">
+   442→   442→                  <SelectValue />
+   443→   443→                </SelectTrigger>
+   444→   444→                <SelectContent>
+   445→   445→                  {ROLE_OPTIONS.map((opt) => (
+   446→   446→                    <SelectItem key={opt.value} value={opt.value}>
+   447→   447→                      {opt.label}
+   448→   448→                    </SelectItem>
+   449→   449→                  ))}
+   450→   450→                </SelectContent>
+   451→   451→              </Select>
+   452→   452→            </div>
+   453→   453→          </div>
+   454→   454→          <DialogFooter>
+   455→   455→            <Button variant="outline" onClick={() => setInviteOpen(false)}>
+   456→   456→              Cancel
+   457→   457→            </Button>
+   458→   458→            <Button onClick={handleInvite} disabled={!inviteEmail.trim() || inviting}>
+   459→   459→              {inviting ? 'Inviting...' : 'Send Invite'}
+   460→   460→            </Button>
+   461→   461→          </DialogFooter>
+   462→   462→        </DialogContent>
+   463→   463→      </Dialog>
+   464→   464→
+   465→   465→      {/* Remove Member Alert */}
+   466→   466→      <AlertDialog open={!!removeTarget} onOpenChange={() => setRemoveTarget(null)}>
+   467→   467→        <AlertDialogContent>
+   468→   468→          <AlertDialogHeader>
+   469→   469→            <AlertDialogTitle>Remove Member</AlertDialogTitle>
+   470→   470→            <AlertDialogDescription>
+   471→   471→              Are you sure you want to remove{' '}
+   472→   472→              <span className="font-medium text-foreground">
+   473→   473→                {removeTarget?.user.name}
+   474→   474→              </span>{' '}
+   475→   475→              from the organization? This action cannot be undone.
+   476→   476→            </AlertDialogDescription>
+   477→   477→          </AlertDialogHeader>
+   478→   478→          <AlertDialogFooter>
+   479→   479→            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+   480→   480→            <AlertDialogAction
+   481→   481→              onClick={handleRemove}
+   482→   482→              disabled={removing}
+   483→   483→              className="bg-red-600 text-white hover:bg-red-700"
+   484→   484→            >
+   485→   485→              {removing ? 'Removing...' : 'Remove'}
+   486→   486→            </AlertDialogAction>
+   487→   487→          </AlertDialogFooter>
+   488→   488→        </AlertDialogContent>
+   489→   489→      </AlertDialog>
+   490→   490→    </div>
+   491→   491→  );
+   492→   492→}
+   493→   493→
+   494→   494→// ── API Keys Tab ──────────────────────────────────────────────────────────────
+   495→   495→
+   496→   496→function ApiKeysTab() {
+   497→   497→  const { toast } = useToast();
+   498→   498→  const [keys, setKeys] = useState<ApiKey[]>([]);
+   499→   499→  const [loading, setLoading] = useState(true);
+   500→   500→  const [createOpen, setCreateOpen] = useState(false);
+   501→   501→  const [newKeyName, setNewKeyName] = useState('');
+   502→   502→  const [newKeyExpiry, setNewKeyExpiry] = useState('');
+   503→   503→  const [newKeyPermissions, setNewKeyPermissions] = useState<string[]>([]);
+   504→   504→  const [creating, setCreating] = useState(false);
+   505→   505→  const [createdKey, setCreatedKey] = useState<string | null>(null);
+   506→   506→  const [copied, setCopied] = useState(false);
+   507→   507→  const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
+   508→   508→  const [revoking, setRevoking] = useState(false);
+   509→   509→
+   510→   510→  const fetchKeys = useCallback(async () => {
+   511→   511→    try {
+   512→   512→      const res = await fetch('/api/org/api-keys');
+   513→   513→      const data = await res.json();
+   514→   514→      if (data.items) setKeys(data.items);
+   515→   515→    } catch {
+   516→   516→      toast({ title: 'Failed to load API keys', variant: 'destructive' });
+   517→   517→    } finally {
+   518→   518→      setLoading(false);
+   519→   519→    }
+   520→   520→  }, [toast]);
+   521→   521→
+   522→   522→  useEffect(() => {
+   523→   523→    fetchKeys();
+   524→   524→  }, [fetchKeys]);
+   525→   525→
+   526→   526→  const handleCreate = async () => {
+   527→   527→    if (!newKeyName.trim()) return;
+   528→   528→    setCreating(true);
+   529→   529→    try {
+   530→   530→      const res = await fetch('/api/org/api-keys', {
+   531→   531→        method: 'POST',
+   532→   532→        headers: { 'Content-Type': 'application/json' },
+   533→   533→        body: JSON.stringify({
+   534→   534→          name: newKeyName,
+   535→   535→          expiresAt: newKeyExpiry || null,
+   536→   536→          permissions: newKeyPermissions.length > 0 ? newKeyPermissions : null,
+   537→   537→        }),
+   538→   538→      });
+   539→   539→      if (res.ok) {
+   540→   540→        const data = await res.json();
+   541→   541→        setCreatedKey(data.key);
+   542→   542→        setNewKeyName('');
+   543→   543→        setNewKeyExpiry('');
+   544→   544→        setNewKeyPermissions([]);
+   545→   545→        fetchKeys();
+   546→   546→      } else {
+   547→   547→        const err = await res.json();
+   548→   548→        toast({ title: err.error || 'Failed to create API key', variant: 'destructive' });
+   549→   549→      }
+   550→   550→    } catch {
+   551→   551→      toast({ title: 'Failed to create API key', variant: 'destructive' });
+   552→   552→    } finally {
+   553→   553→      setCreating(false);
+   554→   554→    }
+   555→   555→  };
+   556→   556→
+   557→   557→  const handleCopyKey = () => {
+   558→   558→    if (createdKey) {
+   559→   559→      navigator.clipboard.writeText(createdKey);
+   560→   560→      setCopied(true);
+   561→   561→      setTimeout(() => setCopied(false), 2000);
+   562→   562→    }
+   563→   563→  };
+   564→   564→
+   565→   565→  const handleRevoke = async () => {
+   566→   566→    if (!revokeTarget) return;
+   567→   567→    setRevoking(true);
+   568→   568→    try {
+   569→   569→      const res = await fetch(`/api/org/api-keys/${revokeTarget.id}`, {
+   570→   570→        method: 'DELETE',
+   571→   571→      });
+   572→   572→      if (res.ok) {
+   573→   573→        toast({ title: 'API key revoked successfully' });
+   574→   574→        setRevokeTarget(null);
+   575→   575→        fetchKeys();
+   576→   576→      } else {
+   577→   577→        const err = await res.json();
+   578→   578→        toast({ title: err.error || 'Failed to revoke API key', variant: 'destructive' });
+   579→   579→      }
+   580→   580→    } catch {
+   581→   581→      toast({ title: 'Failed to revoke API key', variant: 'destructive' });
+   582→   582→    } finally {
+   583→   583→      setRevoking(false);
+   584→   584→    }
+   585→   585→  };
+   586→   586→
+   587→   587→  const togglePermission = (perm: string) => {
+   588→   588→    setNewKeyPermissions((prev) =>
+   589→   589→      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+   590→   590→    );
+   591→   591→  };
+   592→   592→
+   593→   593→  return (
+   594→   594→    <div className="space-y-6">
+   595→   595→      <div className="flex items-center justify-between">
+   596→   596→        <p className="text-sm text-muted-foreground">
+   597→   597→          {keys.length} active key{keys.length !== 1 ? 's' : ''}
+   598→   598→        </p>
+   599→   599→        <Button onClick={() => setCreateOpen(true)}>
+   600→   600→          <Plus className="mr-2 h-4 w-4" />
+   601→   601→          Create API Key
+   602→   602→        </Button>
+   603→   603→      </div>
+   604→   604→
+   605→   605→      <div className="rounded-lg border">
+   606→   606→        {loading ? (
+   607→   607→          <div className="space-y-3 p-6">
+   608→   608→            {Array.from({ length: 3 }).map((_, i) => (
+   609→   609→              <div key={i} className="flex items-center gap-4">
+   610→   610→                <Skeleton className="h-4 w-[160px]" />
+   611→   611→                <Skeleton className="h-4 w-[180px]" />
+   612→   612→                <Skeleton className="h-4 w-[100px]" />
+   613→   613→                <Skeleton className="h-4 w-[80px]" />
+   614→   614→              </div>
+   615→   615→            ))}
+   616→   616→          </div>
+   617→   617→        ) : keys.length === 0 ? (
+   618→   618→          <div className="flex flex-col items-center justify-center py-12 text-center">
+   619→   619→            <Key className="mb-3 h-8 w-8 text-muted-foreground/50" />
+   620→   620→            <p className="text-sm text-muted-foreground">No API keys yet.</p>
+   621→   621→            <p className="text-xs text-muted-foreground mb-3">
+   622→   622→              Create an API key to authenticate programmatic access.
+   623→   623→            </p>
+   624→   624→            <Button size="sm" onClick={() => setCreateOpen(true)}>
+   625→   625→              <Plus className="mr-2 h-3 w-3" />
+   626→   626→              Create API Key
+   627→   627→            </Button>
+   628→   628→          </div>
+   629→   629→        ) : (
+   630→   630→          <Table>
+   631→   631→            <TableHeader>
+   632→   632→              <TableRow>
+   633→   633→                <TableHead>Name</TableHead>
+   634→   634→                <TableHead>Key</TableHead>
+   635→   635→                <TableHead>Created</TableHead>
+   636→   636→                <TableHead>Last Used</TableHead>
+   637→   637→                <TableHead>Status</TableHead>
+   638→   638→                <TableHead className="w-[80px]">Actions</TableHead>
+   639→   639→              </TableRow>
+   640→   640→            </TableHeader>
+   641→   641→            <TableBody>
+   642→   642→              {keys.map((key) => (
+   643→   643→                <TableRow key={key.id}>
+   644→   644→                  <TableCell className="font-medium">{key.name}</TableCell>
+   645→   645→                  <TableCell className="font-mono text-xs text-muted-foreground">
+   646→   646→                    {key.keyPrefix}****
+   647→   647→                  </TableCell>
+   648→   648→                  <TableCell className="text-sm text-muted-foreground">
+   649→   649→                    {formatDistanceToNow(new Date(key.createdAt), { addSuffix: true })}
+   650→   650→                  </TableCell>
+   651→   651→                  <TableCell className="text-sm text-muted-foreground">
+   652→   652→                    {key.lastUsedAt
+   653→   653→                      ? formatDistanceToNow(new Date(key.lastUsedAt), { addSuffix: true })
+   654→   654→                      : 'Never'}
+   655→   655→                  </TableCell>
+   656→   656→                  <TableCell>
+   657→   657→                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20">
+   658→   658→                      Active
+   659→   659→                    </Badge>
+   660→   660→                  </TableCell>
+   661→   661→                  <TableCell>
+   662→   662→                    <Button
+   663→   663→                      variant="ghost"
+   664→   664→                      size="icon"
+   665→   665→                      className="h-8 w-8 text-muted-foreground hover:text-red-400"
+   666→   666→                      onClick={() => setRevokeTarget(key)}
+   667→   667→                    >
+   668→   668→                      <Trash2 className="h-4 w-4" />
+   669→   669→                    </Button>
+   670→   670→                  </TableCell>
+   671→   671→                </TableRow>
+   672→   672→              ))}
+   673→   673→            </TableBody>
+   674→   674→          </Table>
+   675→   675→        )}
+   676→   676→      </div>
+   677→   677→
+   678→   678→      {/* Create API Key Dialog */}
+   679→   679→      <Dialog
+   680→   680→        open={createOpen && !createdKey}
+   681→   681→        onOpenChange={(open) => {
+   682→   682→          setCreateOpen(open);
+   683→   683→          if (!open) {
+   684→   684→            setNewKeyName('');
+   685→   685→            setNewKeyExpiry('');
+   686→   686→            setNewKeyPermissions([]);
+   687→   687→          }
+   688→   688→        }}
+   689→   689→      >
+   690→   690→        <DialogContent className="max-w-md">
+   691→   691→          <DialogHeader>
+   692→   692→            <DialogTitle>Create API Key</DialogTitle>
+   693→   693→            <DialogDescription>
+   694→   694→              Generate a new API key for programmatic access.
+   695→   695→            </DialogDescription>
+   696→   696→          </DialogHeader>
+   697→   697→          <div className="space-y-4 py-2">
+   698→   698→            <div className="space-y-2">
+   699→   699→              <Label htmlFor="key-name">Key Name</Label>
+   700→   700→              <Input
+   701→   701→                id="key-name"
+   702→   702→                placeholder="e.g., CI/CD Pipeline Key"
+   703→   703→                value={newKeyName}
+   704→   704→                onChange={(e) => setNewKeyName(e.target.value)}
+   705→   705→              />
+   706→   706→            </div>
+   707→   707→            <div className="space-y-2">
+   708→   708→              <Label htmlFor="key-expiry">Expiration Date</Label>
+   709→   709→              <Input
+   710→   710→                id="key-expiry"
+   711→   711→                type="date"
+   712→   712→                value={newKeyExpiry}
+   713→   713→                onChange={(e) => setNewKeyExpiry(e.target.value)}
+   714→   714→              />
+   715→   715→            </div>
+   716→   716→            <div className="space-y-3">
+   717→   717→              <Label>Permissions</Label>
+   718→   718→              <div className="space-y-2">
+   719→   719→                {PERMISSION_OPTIONS.map((perm) => (
+   720→   720→                  <label
+   721→   721→                    key={perm.value}
+   722→   722→                    className="flex items-center gap-2 cursor-pointer rounded-md border p-3 hover:bg-muted/50 transition-colors"
+   723→   723→                  >
+   724→   724→                    <Checkbox
+   725→   725→                      checked={newKeyPermissions.includes(perm.value)}
+   726→   726→                      onCheckedChange={() => togglePermission(perm.value)}
+   727→   727→                    />
+   728→   728→                    <span className="text-sm">{perm.label}</span>
+   729→   729→                    <span className="ml-auto font-mono text-xs text-muted-foreground">
+   730→   730→                      {perm.value}
+   731→   731→                    </span>
+   732→   732→                  </label>
+   733→   733→                ))}
+   734→   734→              </div>
+   735→   735→            </div>
+   736→   736→          </div>
+   737→   737→          <DialogFooter>
+   738→   738→            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+   739→   739→              Cancel
+   740→   740→            </Button>
+   741→   741→            <Button onClick={handleCreate} disabled={!newKeyName.trim() || creating}>
+   742→   742→              {creating ? 'Creating...' : 'Create Key'}
+   743→   743→            </Button>
+   744→   744→          </DialogFooter>
+   745→   745→        </DialogContent>
+   746→   746→      </Dialog>
+   747→   747→
+   748→   748→      {/* Created Key Display Dialog */}
+   749→   749→      <Dialog
+   750→   750→        open={!!createdKey}
+   751→   751→        onOpenChange={(open) => {
+   752→   752→          if (!open) {
+   753→   753→            setCreatedKey(null);
+   754→   754→            setCreateOpen(false);
+   755→   755→          }
+   756→   756→        }}
+   757→   757→      >
+   758→   758→        <DialogContent className="max-w-md">
+   759→   759→          <DialogHeader>
+   760→   760→            <DialogTitle>API Key Created</DialogTitle>
+   761→   761→            <DialogDescription>
+   762→   762→              Your API key has been generated. Copy it now — it will not be shown again.
+   763→   763→            </DialogDescription>
+   764→   764→          </DialogHeader>
+   765→   765→          <div className="space-y-3">
+   766→   766→            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+   767→   767→              <div className="flex items-start gap-2">
+   768→   768→                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+   769→   769→                <p className="text-sm text-amber-400">
+   770→   770→                  This key will not be shown again. Make sure to copy it and store it securely.
+   771→   771→                </p>
+   772→   772→              </div>
+   773→   773→            </div>
+   774→   774→            <div className="space-y-2">
+   775→   775→              <Label>API Key</Label>
+   776→   776→              <div className="flex items-center gap-2">
+   777→   777→                <Input
+   778→   778→                  value={createdKey || ''}
+   779→   779→                  readOnly
+   780→   780→                  className="font-mono text-xs bg-muted/50"
+   781→   781→                />
+   782→   782→                <Button
+   783→   783→                  variant="outline"
+   784→   784→                  size="icon"
+   785→   785→                  className="shrink-0"
+   786→   786→                  onClick={handleCopyKey}
+   787→   787→                >
+   788→   788→                  {copied ? (
+   789→   789→                    <Check className="h-4 w-4 text-emerald-500" />
+   790→   790→                  ) : (
+   791→   791→                    <Copy className="h-4 w-4" />
+   792→   792→                  )}
+   793→   793→                </Button>
+   794→   794→              </div>
+   795→   795→            </div>
+   796→   796→          </div>
+   797→   797→          <DialogFooter>
+   798→   798→            <Button onClick={() => setCreatedKey(null)}>Done</Button>
+   799→   799→          </DialogFooter>
+   800→   800→        </DialogContent>
+   801→   801→      </Dialog>
+   802→   802→
+   803→   803→      {/* Revoke Key Alert */}
+   804→   804→      <AlertDialog open={!!revokeTarget} onOpenChange={() => setRevokeTarget(null)}>
+   805→   805→        <AlertDialogContent>
+   806→   806→          <AlertDialogHeader>
+   807→   807→            <AlertDialogTitle>Revoke API Key</AlertDialogTitle>
+   808→   808→            <AlertDialogDescription>
+   809→   809→              Are you sure you want to revoke the API key{' '}
+   810→   810→              <span className="font-medium text-foreground">{revokeTarget?.name}</span>?
+   811→   811→              Any applications using this key will lose access immediately.
+   812→   812→            </AlertDialogDescription>
+   813→   813→          </AlertDialogHeader>
+   814→   814→          <AlertDialogFooter>
+   815→   815→            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+   816→   816→            <AlertDialogAction
+   817→   817→              onClick={handleRevoke}
+   818→   818→              disabled={revoking}
+   819→   819→              className="bg-red-600 text-white hover:bg-red-700"
+   820→   820→            >
+   821→   821→              {revoking ? 'Revoking...' : 'Revoke Key'}
+   822→   822→            </AlertDialogAction>
+   823→   823→          </AlertDialogFooter>
+   824→   824→        </AlertDialogContent>
+   825→   825→      </AlertDialog>
+   826→   826→    </div>
+   827→   827→  );
+   828→   828→}
+   829→   829→
+   830→   830→// ── Security Tab ──────────────────────────────────────────────────────────────
+   831→   831→
+   832→   832→function SecurityTab() {
+   833→   833→  const { toast } = useToast();
+   834→   834→  const [mfaEnabled, setMfaEnabled] = useState(false);
+   835→   835→
+   836→   836→  const handleSettingChange = () => {
+   837→   837→    toast({
+   838→   838→      title: 'Settings saved',
+   839→   839→      description: 'Security settings updated successfully.',
+   840→   840→    });
+   841→   841→  };
+   842→   842→
+   843→   843→  return (
+   844→   844→    <div className="space-y-6">
+   845→   845→      {/* SSO Configuration */}
+   846→   846→      <Card>
+   847→   847→        <CardHeader>
+   848→   848→          <div className="flex items-center gap-2">
+   849→   849→            <Lock className="h-4 w-4 text-primary" />
+   850→   850→            <CardTitle className="text-base">SSO Configuration</CardTitle>
+   851→   851→          </div>
+   852→   852→          <CardDescription>
+   853→   853→            Configure Single Sign-On for your organization.
+   854→   854→          </CardDescription>
+   855→   855→        </CardHeader>
+   856→   856→        <CardContent className="space-y-4">
+   857→   857→          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   858→   858→            <div className="space-y-2">
+   859→   859→              <Label>OIDC Provider</Label>
+   860→   860→              <Input value="Okta" readOnly className="bg-muted/50" />
+   861→   861→            </div>
+   862→   862→            <div className="space-y-2">
+   863→   863→              <Label>Client ID</Label>
+   864→   864→              <Input
+   865→   865→                value="0oab12cdef3GHIJKL4x7"
+   866→   866→                readOnly
+   867→   867→                className="bg-muted/50 font-mono"
+   868→   868→              />
+   869→   869→            </div>
+   870→   870→            <div className="space-y-2">
+   871→   871→              <Label>Client Secret</Label>
+   872→   872→              <div className="flex items-center gap-2">
+   873→   873→                <Input
+   874→   874→                  type="password"
+   875→   875→                  value="••••••••••••••••••••"
+   876→   876→                  readOnly
+   877→   877→                  className="bg-muted/50 font-mono"
+   878→   878→                />
+   879→   879→                <Tooltip>
+   880→   880→                  <TooltipTrigger asChild>
+   881→   881→                    <Button variant="outline" size="icon" className="shrink-0">
+   882→   882→                      <Copy className="h-4 w-4" />
+   883→   883→                    </Button>
+   884→   884→                  </TooltipTrigger>
+   885→   885→                  <TooltipContent>Copy Client Secret</TooltipContent>
+   886→   886→                </Tooltip>
+   887→   887→              </div>
+   888→   888→            </div>
+   889→   889→            <div className="space-y-2">
+   890→   890→              <Label>Issuer URL</Label>
+   891→   891→              <Input
+   892→   892→                value="https://acme.okta.com/oauth2/default"
+   893→   893→                readOnly
+   894→   894→                className="bg-muted/50 font-mono text-xs"
+   895→   895→              />
+   896→   896→            </div>
+   897→   897→          </div>
+   898→   898→          <p className="text-xs text-muted-foreground">
+   899→   899→            Contact your IT administrator to modify SSO settings.
+   900→   900→          </p>
+   901→   901→        </CardContent>
+   902→   902→      </Card>
+   903→   903→
+   904→   904→      {/* MFA Enforcement */}
+   905→   905→      <Card>
+   906→   906→        <CardHeader>
+   907→   907→          <div className="flex items-center gap-2">
+   908→   908→            <Shield className="h-4 w-4 text-primary" />
+   909→   909→            <CardTitle className="text-base">Multi-Factor Authentication</CardTitle>
+   910→   910→          </div>
+   911→   911→          <CardDescription>
+   912→   912→            Enforce MFA for all organization members.
+   913→   913→          </CardDescription>
+   914→   914→        </CardHeader>
+   915→   915→        <CardContent>
+   916→   916→          <div className="flex items-center justify-between rounded-lg border p-4">
+   917→   917→            <div className="space-y-0.5">
+   918→   918→              <p className="text-sm font-medium">MFA Enforcement</p>
+   919→   919→              <p className="text-xs text-muted-foreground">
+   920→   920→                Require all members to use multi-factor authentication
+   921→   921→              </p>
+   922→   922→            </div>
+   923→   923→            <Switch
+   924→   924→              checked={mfaEnabled}
+   925→   925→              onCheckedChange={(checked) => {
+   926→   926→                setMfaEnabled(checked);
+   927→   927→                handleSettingChange();
+   928→   928→              }}
+   929→   929→            />
+   930→   930→          </div>
+   931→   931→        </CardContent>
+   932→   932→      </Card>
+   933→   933→
+   934→   934→      {/* Session Management */}
+   935→   935→      <Card>
+   936→   936→        <CardHeader>
+   937→   937→          <div className="flex items-center gap-2">
+   938→   938→            <Clock className="h-4 w-4 text-primary" />
+   939→   939→            <CardTitle className="text-base">Session Management</CardTitle>
+   940→   940→          </div>
+   941→   941→          <CardDescription>
+   942→   942→            Configure session settings for your organization.
+   943→   943→          </CardDescription>
+   944→   944→        </CardHeader>
+   945→   945→        <CardContent className="space-y-4">
+   946→   946→          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   947→   947→            <div className="space-y-2">
+   948→   948→              <Label>Default Session Duration</Label>
+   949→   949→              <Input value="24 hours" readOnly className="bg-muted/50" />
+   950→   950→            </div>
+   951→   951→            <div className="space-y-2">
+   952→   952→              <Label>Max Concurrent Sessions</Label>
+   953→   953→              <Input value="5 per user" readOnly className="bg-muted/50" />
+   954→   954→            </div>
+   955→   955→          </div>
+   956→   956→          <p className="text-xs text-muted-foreground">
+   957→   957→            Session settings can be configured by organization administrators.
+   958→   958→          </p>
+   959→   959→        </CardContent>
+   960→   960→      </Card>
+   961→   961→    </div>
+   962→   962→  );
+   963→   963→}
+   964→   964→
+   965→   965→// ── Main Component ────────────────────────────────────────────────────────────
+   966→   966→
+   967→   967→export default function OrgSettingsPage() {
+   968→   968→  const { toast } = useToast();
+   969→   969→  const [org, setOrg] = useState<OrgData | null>(null);
+   970→   970→  const [loading, setLoading] = useState(true);
+   971→   971→
+   972→   972→  const fetchOrg = useCallback(async () => {
+   973→   973→    try {
+   974→   974→      const res = await fetch('/api/org');
+   975→   975→      if (res.ok) {
+   976→   976→        const data = await res.json();
+   977→   977→        setOrg(data);
+   978→   978→      }
+   979→   979→    } catch {
+   980→   980→      toast({ title: 'Failed to load organization', variant: 'destructive' });
+   981→   981→    } finally {
+   982→   982→      setLoading(false);
+   983→   983→    }
+   984→   984→  }, [toast]);
+   985→   985→
+   986→   986→  useEffect(() => {
+   987→   987→    fetchOrg();
+   988→   988→  }, [fetchOrg]);
+   989→   989→
+   990→   990→  return (
+   991→   991→    <div className="space-y-6">
+   992→   992→      {/* Header */}
+   993→   993→      <div className="flex items-center gap-3">
+   994→   994→        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+   995→   995→          <Settings className="h-5 w-5 text-primary" />
+   996→   996→        </div>
+   997→   997→        <div>
+   998→   998→          <h1 className="text-2xl font-bold tracking-tight">Organization Settings</h1>
+   999→   999→          <p className="text-sm text-muted-foreground">
+  1000→  1000→            Manage your organization, members, and security
+  1001→  1001→          </p>
+  1002→  1002→        </div>
+  1003→  1003→      </div>
+  1004→  1004→
+  1005→  1005→      {/* Tabs */}
+  1006→  1006→      <Tabs defaultValue="general" className="space-y-6">
+  1007→  1007→        <TabsList>
+  1008→  1008→          <TabsTrigger value="general" className="gap-1.5">
+  1009→  1009→            <Settings className="h-3.5 w-3.5" />
+  1010→  1010→            General
+  1011→  1011→          </TabsTrigger>
+  1012→  1012→          <TabsTrigger value="members" className="gap-1.5">
+  1013→  1013→            <Users className="h-3.5 w-3.5" />
+  1014→  1014→            Members
+  1015→  1015→          </TabsTrigger>
+  1016→  1016→          <TabsTrigger value="api-keys" className="gap-1.5">
+  1017→  1017→            <Key className="h-3.5 w-3.5" />
+  1018→  1018→            API Keys
+  1019→  1019→          </TabsTrigger>
+  1020→  1020→          <TabsTrigger value="security" className="gap-1.5">
+  1021→  1021→            <Shield className="h-3.5 w-3.5" />
+  1022→  1022→            Security
+  1023→  1023→          </TabsTrigger>
+  1024→  1024→        </TabsList>
+  1025→  1025→
+  1026→  1026→        <TabsContent value="general">
+  1027→  1027→          <GeneralTab org={org} loading={loading} />
+  1028→  1028→        </TabsContent>
+  1029→  1029→
+  1030→  1030→        <TabsContent value="members">
+  1031→  1031→          <MembersTab />
+  1032→  1032→        </TabsContent>
+  1033→  1033→
+  1034→  1034→        <TabsContent value="api-keys">
+  1035→  1035→          <ApiKeysTab />
+  1036→  1036→        </TabsContent>
+  1037→  1037→
+  1038→  1038→        <TabsContent value="security">
+  1039→  1039→          <SecurityTab />
+  1040→  1040→        </TabsContent>
+  1041→  1041→      </Tabs>
+  1042→  1042→    </div>
+  1043→  1043→  );
+  1044→  1044→}

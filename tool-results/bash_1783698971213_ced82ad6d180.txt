@@ -1,0 +1,1787 @@
++-----------------------------------------------------------------------+
+| ModelVault                                                            |
+|                                                                       |
+| AI Model Artifact Security & Integrity Platform                       |
+|                                                                       |
+| End-to-End Product Specification                                      |
+|                                                                       |
+| Complete Engineering Blueprint                                        |
+|                                                                       |
+| Security-First Architecture | Full Stack | All Features               |
+| Production-Ready                                                      |
+|                                                                       |
+| CONFIDENTIAL                                                          |
+|                                                                       |
+| July 2026                                                             |
++-----------------------------------------------------------------------+
+
+Table of Contents
+
+1. Executive Summary 1
+
+2. System Architecture Overview 2
+
+  2.1 High-Level Architecture 2
+
+  2.2 Technology Stack 2
+
+  2.3 Microservice Decomposition 2
+
+3. Security Architecture 3
+
+  3.1 Network Security 3
+
+  3.1.1 Zero-Trust Network Architecture 3
+
+  3.1.2 Network Segmentation and Firewall Rules 3
+
+  3.1.3 DDoS Protection 4
+
+  3.2 Authentication and Authorization 4
+
+  3.2.1 Authentication Flow 4
+
+  3.2.2 Role-Based Access Control (RBAC) 4
+
+  3.3 Data Security 5
+
+  3.3.1 Encryption at Rest 5
+
+  3.3.2 Encryption in Transit 5
+
+  3.3.3 Secrets Management 5
+
+  3.4 Application Security 6
+
+  3.4.1 Input Validation and Sanitization 6
+
+  3.4.2 SQL Injection Prevention 6
+
+  3.4.3 Cross-Site Request Forgery (CSRF) Protection 6
+
+  3.4.4 Dependency Security 6
+
+  3.5 Audit Logging 7
+
+4. Backend API Specification 7
+
+  4.1 API Design Principles 7
+
+  4.2 Authentication Endpoints 7
+
+  4.3 Model Artifact Endpoints 7
+
+  4.4 Organization and User Management Endpoints 8
+
+  4.5 Registry and Policy Endpoints 8
+
+  4.6 Key File Upload Process (TUS Resumable) 8
+
+5. Database Schema 8
+
+  5.1 Schema Overview 8
+
+  5.2 Core Tables 9
+
+  5.2.1 organizations 9
+
+  5.2.2 users 9
+
+  5.2.3 org_members 9
+
+  5.2.4 models 9
+
+  5.2.5 model_versions 9
+
+  5.2.6 signatures 9
+
+  5.2.7 sboms 10
+
+  5.2.8 sandbox_jobs 10
+
+  5.2.9 audit_log 10
+
+6. Feature Specifications 10
+
+  6.1 Feature 1: Model Signing and Verification 10
+
+  6.1.1 How Model Signing Works 10
+
+  6.1.2 Merkle Tree Integrity 11
+
+  6.2 Feature 2: AI-SBOM Generation 11
+
+  6.2.1 How SBOM Generation Works 11
+
+  6.3 Feature 3: Pre-Deployment Quarantine Sandbox 12
+
+  6.3.1 Sandbox Architecture 12
+
+  6.3.2 Behavioral Test Suite 12
+
+  6.3.3 Sandbox Job Lifecycle 13
+
+  6.4 Feature 4: Secure Model Artifact Registry 13
+
+  6.4.1 Registry Design 13
+
+  6.4.2 Policy Engine 13
+
+  6.5 Feature 5: CI/CD Integration 14
+
+  6.5.1 GitHub Actions Integration 14
+
+  6.5.2 GitLab CI and Generic Webhook Integration 14
+
+  6.6 Feature 6: Dashboard and Analytics 14
+
+7. Frontend Specification 15
+
+  7.1 Technology and Design System 15
+
+  7.2 Page Specifications 15
+
+  7.2.1 Landing Page (/) 15
+
+  7.2.2 Authentication Pages (/login, /register, /forgot-password,
+  /reset-password) 15
+
+  7.2.3 Dashboard Page (/dashboard) 16
+
+  7.2.4 Models List Page (/models) 16
+
+  7.2.5 Model Detail Page (/models/{model_id}) 16
+
+  7.2.6 Upload Model Modal 17
+
+  7.2.7 Registries Page (/registries) 17
+
+  7.2.8 Audit Log Page (/audit) 17
+
+  7.2.9 Organization Settings Page (/org/settings) 17
+
+8. Infrastructure and Deployment 18
+
+  8.1 Kubernetes Deployment Architecture 18
+
+  8.2 CI/CD Pipeline 18
+
+  8.3 Backup and Disaster Recovery 18
+
+9. Pricing 18
+
+(Right-click the Table of Contents above and select “Update Field” to
+refresh page numbers after opening in Word.)
+
+1. Executive Summary
+
+ModelVault is a security-first platform that provides cryptographic
+integrity verification, supply chain analysis, behavioral sandboxing,
+and secure registry services for AI model artifacts. The platform serves
+AI companies, ML engineering teams, and enterprise security departments
+by ensuring that every model artifact deployed to production is
+authentic, untampered, fully cataloged, and behaviorally verified. No
+feature in this product uses artificial intelligence. The entire
+platform is built on deterministic cryptography, static analysis,
+sandboxing, and policy enforcement engines.
+
+This document serves as the complete engineering blueprint for building
+ModelVault from zero to production. It specifies every backend endpoint,
+database table, frontend page and component, security control, process
+flow, and deployment configuration. Every feature described is real and
+implementable. There are no placeholder, stub, or dummy features. The
+architecture is designed to be secure by default, with defense-in-depth
+applied at every layer: network, application, data, and physical
+infrastructure.
+
+The four core pillars of the platform are: Model Signing and
+Verification using Sigstore-style keyless signing with SHA-256 and
+Merkle tree integrity proofs; AI-SBOM Generation using static parsing of
+model formats including SafeTensors, GGUF, ONNX, and PyTorch bin files
+to produce CycloneDX ML-BOM compliant artifacts; Pre-Deployment
+Quarantine Sandboxing using Firecracker microVMs with eBPF-based
+behavioral monitoring; and a Secure Model Artifact Registry with
+role-based access control, policy gates, and a complete cryptographic
+audit trail. Pricing for all tiers requires direct contact with the
+sales team.
+
+2. System Architecture Overview
+
+2.1 High-Level Architecture
+
+ModelVault follows a strict three-tier architecture: a React/Next.js
+frontend, a Go-based API gateway and microservice backend, and a
+PostgreSQL database with Redis caching. The entire system runs inside
+Kubernetes with Istio service mesh for zero-trust network communication.
+Every inter-service call uses mutual TLS. The sandbox subsystem uses
+Firecracker microVMs orchestrated by a dedicated sandbox scheduler
+service that runs on isolated GPU-capable nodes. Object storage for
+model artifacts uses MinIO (self-hosted S3-compatible) with server-side
+encryption. The cryptographic signing subsystem integrates with a
+HashiCorp Vault instance for key material management.
+
+The frontend communicates exclusively through the API gateway. The API
+gateway handles authentication via short-lived JWT tokens issued after
+OAuth 2.0 / OIDC login, rate limiting per organization, request
+validation against JSON schemas, and routing to internal microservices.
+No service is directly accessible from outside the Kubernetes cluster.
+All ingress traffic passes through a load balancer that terminates TLS
+1.3 and forwards to the API gateway over mTLS. The API gateway runs
+Envoy proxies with WebAssembly filters for request-level security
+policies including payload size limits (max 50GB for model uploads,
+enforced via streaming upload endpoints), content-type validation, and
+SQL injection pattern blocking at the edge.
+
+2.2 Technology Stack
+
+  -----------------------------------------------------------------------
+  Layer                   Technology              Justification
+  ----------------------- ----------------------- -----------------------
+  Frontend                Next.js 15 (App         SSR for security pages,
+                          Router), React 19,      strong typing, large
+                          TypeScript 5.6          ecosystem
+
+  UI Framework            Tailwind CSS 4,         Utility-first CSS,
+                          shadcn/ui, Radix        accessible components,
+                          primitives              no runtime overhead
+
+  State Management        Zustand + TanStack      Minimal boilerplate,
+                          Query v5                server state caching,
+                                                  optimistic updates
+
+  API Gateway             Go + Envoy (gRPC+REST)  High throughput for
+                                                  large file streaming,
+                                                  low latency
+
+  Backend Services        Go 1.23 microservices,  Performance, strong
+                          gRPC internal           concurrency, compiled
+                                                  binary security
+
+  Database                PostgreSQL 16 with      AES-256 encryption at
+                          pgcrypto extension      rest, cryptographic
+                                                  functions, row-level
+                                                  security
+
+  Cache                   Redis 7 (cluster mode,  Session storage, rate
+                          TLS)                    limiting, job queue
+                                                  status
+
+  Object Storage          MinIO (S3-compatible,   Model artifact storage,
+                          server-side AES-256)    versioned buckets
+
+  Sandbox                 Firecracker microVMs +  Isolated execution,
+                          eBPF (bcc/libbpf)       kernel-level behavioral
+                                                  monitoring
+
+  Key Management          HashiCorp Vault         Signing key material,
+                          (HSM-backed in          encryption keys, PKI
+                          production)             
+
+  Container Orch.         Kubernetes 1.31 + Istio Zero-trust networking,
+                          1.24                    service mesh mTLS, pod
+                                                  security
+
+  CI/CD                   GitHub Actions + ArgoCD Infrastructure as code,
+                          (GitOps)                immutable deployments
+
+  Monitoring              Prometheus + Grafana +  Metrics, dashboards,
+                          Jaeger (tracing)        distributed tracing
+
+  Log Aggregation         Fluentd +               Centralized logging,
+                          Elasticsearch + Kibana  audit log immutability
+                          (EFK)                   
+  -----------------------------------------------------------------------
+
+2.3 Microservice Decomposition
+
+The backend is decomposed into eight isolated microservices, each with a
+single responsibility boundary. Each service owns its database schema
+(either separate PostgreSQL schemas or separate databases) and
+communicates with other services exclusively through asynchronous gRPC
+calls or a Kafka event bus for decoupled workflows like scan processing
+and sandbox job scheduling.
+
+  ------------------------------------------------------------------------
+  Service            Responsibility    Port              Database
+  ------------------ ----------------- ----------------- -----------------
+  api-gateway        Auth, rate        :8080             None (stateless)
+                     limiting,                           
+                     routing,                            
+                     validation                          
+
+  auth-service       User management,  :8081             auth_db
+                     OIDC, JWT, RBAC,                    
+                     sessions                            
+
+  model-service      Model artifact    :8082             model_db
+                     CRUD, metadata,                     
+                     versioning                          
+
+  signing-service    Keyless signing,  :8083             signing_db
+                     verification,                       
+                     signature storage                   
+
+  sbom-service       Static analysis,  :8084             sbom_db
+                     dependency                          
+                     extraction, SBOM                    
+                     gen                                 
+
+  sandbox-service    VM provisioning,  :8085             sandbox_db
+                     test execution,                     
+                     result capture                      
+
+  registry-service   Organization      :8086             registry_db
+                     registries,                         
+                     policy engine,                      
+                     deployment gates                    
+
+  audit-service      Immutable audit   :8087             audit_db
+                     log, compliance                     
+                     reporting, event                    
+                     sourcing                            
+  ------------------------------------------------------------------------
+
+3. Security Architecture
+
+Security is not a feature layer added on top of ModelVault; it is the
+foundation upon which every component is built. This section describes
+every security control, threat mitigation, and defensive measure
+implemented across the entire stack. The security model follows
+zero-trust principles: no service, user, or network segment is trusted
+by default. Every request is authenticated, every action is authorized,
+every data access is logged, and every secret is encrypted.
+
+3.1 Network Security
+
+3.1.1 Zero-Trust Network Architecture
+
+The entire platform operates within a Kubernetes cluster where Istio
+service mesh enforces mutual TLS between every pair of communicating
+services. Each service has a unique SPIFFE identity certificate issued
+by the Istio Citadel CA. No service can communicate with another without
+presenting a valid certificate. The Istio AuthorizationPolicy resources
+enforce specific allowed communication paths: for example, the
+api-gateway can call auth-service and model-service, but the
+sbom-service cannot directly call the registry-service. All
+cross-service traffic is encrypted with TLS 1.3 using ephemeral keys
+rotated every hour.
+
+External ingress traffic passes through a Kubernetes Ingress controller
+(NGINX) that terminates TLS 1.3 at the edge. The TLS certificate is
+managed via cert-manager with Let's Encrypt for non-HSM deployments or
+with an enterprise PKI for HSM-backed deployments. The Ingress
+controller enforces HTTP Strict Transport Security (HSTS) with a max-age
+of 31536000 seconds (one year) and includes the includeSubDomains and
+preload directives. All external traffic is further filtered by a Web
+Application Firewall (WAF) ruleset deployed as Envoy WASM filters on the
+api-gateway, which blocks SQL injection, cross-site scripting (XSS),
+path traversal, and command injection patterns before requests reach
+application code.
+
+3.1.2 Network Segmentation and Firewall Rules
+
+The Kubernetes cluster uses network policies to isolate workloads into
+four network zones. The Public Zone contains only the Ingress controller
+and the api-gateway. The Application Zone contains the eight
+microservices. The Data Zone contains PostgreSQL, Redis, and MinIO. The
+Sandbox Zone contains Firecracker VM hosts and is the most heavily
+restricted. Network policies enforce that no pod in the Sandbox Zone can
+initiate outbound connections to the internet (except to pre-approved
+endpoints for downloading model dependencies, which are proxied through
+a dedicated egress gateway that inspects all outbound traffic). The Data
+Zone accepts connections only from the Application Zone on specific
+ports (5432 for PostgreSQL, 6379 for Redis, 9000 for MinIO). Direct
+pod-to-pod communication across zones is prohibited by default and must
+be explicitly allowed via Kubernetes NetworkPolicy resources.
+
+3.1.3 DDoS Protection
+
+The API gateway implements multi-layered rate limiting. At the IP level,
+a token bucket algorithm allows 100 requests per second per IP address,
+with burst capacity of 200 requests. At the organization level, each
+organization has configurable rate limits enforced via Redis sliding
+window counters. At the endpoint level, sensitive endpoints (login,
+password reset, model upload) have stricter limits: login allows 5
+attempts per minute per account, model upload allows 1 concurrent upload
+per user with a 50GB file size limit enforced via streaming upload. The
+rate limiter uses a distributed Redis cluster to ensure consistency
+across multiple api-gateway replicas. Requests exceeding rate limits
+receive HTTP 429 with a Retry-After header.
+
+3.2 Authentication and Authorization
+
+3.2.1 Authentication Flow
+
+ModelVault supports two authentication methods: OAuth 2.0 / OpenID
+Connect for SSO integration (Google Workspace, GitHub, Okta, Azure AD,
+enterprise IdPs via SAML 2.0 bridge), and email/password with SRP
+(Secure Remote Password) protocol for direct authentication. All
+authentication flows result in the issuance of a short-lived JWT access
+token (15-minute expiry) and a longer-lived HTTP-only Secure refresh
+token (7-day expiry, rotated on each use). The JWT contains the user ID,
+organization ID, role, and a jti (JWT ID) claim for revocation tracking.
+JWTs are signed with RS256 using a key pair stored in HashiCorp Vault.
+The public key is distributed to the api-gateway for verification. Token
+revocation is handled by maintaining a revocation list in Redis with TTL
+matching the token expiry, and a persistent revocation record in the
+audit database.
+
+The login flow for email/password works as follows: the client sends the
+SRP verifier (derived from the password using scrypt with N=32768, r=8,
+p=1) to the auth-service. The auth-service validates the SRP proof
+without ever receiving or storing the plaintext password. Passwords are
+never transmitted over the network in any form other than the SRP
+protocol messages. Failed login attempts increment a counter in Redis.
+After 5 consecutive failures within 15 minutes, the account is locked
+for 30 minutes and an email notification is sent to the account owner.
+All login events (successful and failed) are recorded in the immutable
+audit log with the source IP, user agent, timestamp, and outcome.
+
+3.2.2 Role-Based Access Control (RBAC)
+
+ModelVault implements a hierarchical RBAC model with four built-in roles
+and support for custom roles. The four built-in roles are: Organization
+Owner (full control, can manage billing and delete the organization),
+Admin (can manage users, policies, and all artifacts within the
+organization), Developer (can upload, sign, scan, and deploy models;
+cannot manage users or organization settings), and Viewer (read-only
+access to dashboards, scan results, and SBOM reports; cannot modify
+anything). Each role maps to a set of permissions that are checked on
+every API call. The permission check happens in the api-gateway after
+JWT validation: the gateway extracts the user's role from the JWT
+claims, looks up the role's permissions from a cached policy document,
+and compares the required permission for the endpoint against the user's
+granted permissions. If the permission check fails, the request is
+rejected with HTTP 403 and the attempt is logged.
+
+Custom roles are defined at the organization level by Admins and Owners.
+A custom role is a named set of permissions selected from a fixed
+permission catalog. The permission catalog contains 47 granular
+permissions covering every operation in the system, such as
+model:upload, model:delete, model:sign, model:verify, scan:start,
+scan:read, sandbox:provision, sandbox:read, registry:deploy,
+registry:policy:write, audit:read, user:invite, org:settings:write, and
+so on. When a custom role is created or modified, the change is recorded
+in the audit log with the full before-and-after permission set.
+
+3.3 Data Security
+
+3.3.1 Encryption at Rest
+
+All data stored in PostgreSQL is encrypted at rest using AES-256-GCM.
+PostgreSQL native encryption is implemented through the pgcrypto
+extension. Every table that contains sensitive data (user credentials,
+signing keys, model metadata, SBOM contents, audit records) uses
+pgcrypto's pgp_sym_encrypt function for column-level encryption. The
+master encryption key is stored in HashiCorp Vault and is rotated every
+90 days. Key rotation is automated via a Vault agent sidecar container
+that injects the current encryption key into the application services as
+an environment variable. Previous encryption keys are retained in Vault
+for decryption of historical data. MinIO object storage uses server-side
+encryption with SSE-S3 mode, where the S3 master key is also stored in
+Vault and auto-rotated.
+
+3.3.2 Encryption in Transit
+
+All external communication uses TLS 1.3 with forward secrecy (ECDHE key
+exchange). The TLS configuration uses only AEAD cipher suites:
+TLS_AES_256_GCM_SHA384 and TLS_CHACHA20_POLY1305_SHA256. Legacy cipher
+suites (TLS 1.0, 1.1, 1.2, RC4, DES, 3DES, SHA1) are disabled at the
+Ingress controller level. Internal service-to-service communication uses
+mTLS via Istio with automatic certificate rotation every 24 hours. All
+gRPC internal calls use ALTS (Application Layer Transport Security)
+where supported, falling back to mTLS for services that do not yet
+support ALTS. Database connections from application services to
+PostgreSQL use SSL with verify-full mode, meaning the service verifies
+both the server certificate and that the server's CN matches the
+expected database hostname.
+
+3.3.3 Secrets Management
+
+All application secrets, database credentials, API keys, TLS
+certificates, and signing key material are stored in HashiCorp Vault
+with the Transit secrets engine for encryption-as-a-service. Application
+services access secrets through the Vault Agent sidecar pattern: a Vault
+Agent container runs alongside each application pod, authenticates to
+Vault using the Kubernetes auth method (each pod gets a unique JWT bound
+to its service account), and writes the current secret values to a
+shared memory-backed volume. Secrets are never written to disk. The
+Vault Agent automatically renews leases and re-fetches secrets before
+they expire. In production deployments, the Vault unseal key shares are
+distributed across multiple HSM appliances using Shamir's Secret Sharing
+with a 5-of-7 threshold, ensuring no single person or machine can unseal
+Vault independently.
+
+3.4 Application Security
+
+3.4.1 Input Validation and Sanitization
+
+Every API endpoint validates its input against a strict JSON Schema
+definition before processing. The JSON Schema validation runs in the
+api-gateway as a WASM filter, ensuring that malformed, oversized, or
+malicious payloads are rejected before reaching any backend service.
+String fields are validated for length (min/max), character set
+(allowlisting, not denylisting), and format (email, URL, UUID, semver).
+File upload endpoints validate the file's magic bytes against the
+expected format (e.g., SafeTensors files must begin with the JSON header
+followed by the safetensors magic bytes 0x6C6F7261). Uploaded files are
+stored in a staging area with a random UUID filename (never the original
+filename) and are not processed until the upload is complete and the
+checksum matches. All user-supplied text is sanitized to prevent stored
+XSS: HTML tags are stripped, and special characters are entity-encoded
+before storage.
+
+3.4.2 SQL Injection Prevention
+
+All database queries use parameterized prepared statements via pgx (the
+Go PostgreSQL driver). Raw string interpolation in SQL queries is
+prohibited by code review policy and enforced by a custom linter rule
+that scans for fmt.Sprintf or string concatenation in database query
+contexts. Additionally, the PostgreSQL user account used by each
+microservice is granted only the minimum required privileges: SELECT,
+INSERT, UPDATE on specific tables, with no DDL permissions. DDL
+migrations are executed only through a dedicated migration service that
+runs with elevated privileges during deployment and has no runtime API
+access.
+
+3.4.3 Cross-Site Request Forgery (CSRF) Protection
+
+The frontend uses SameSite=Strict cookies for the refresh token, which
+prevents CSRF attacks because the browser will not send the cookie with
+cross-site requests. Additionally, the api-gateway checks the Origin and
+Referer headers on all state-changing requests (POST, PUT, DELETE,
+PATCH) and rejects requests where the origin does not match the expected
+frontend domain. For API-only clients (CLI tools, CI/CD integrations),
+CSRF protection is handled via the OAuth 2.0 client credentials flow,
+which uses bearer tokens instead of cookies.
+
+3.4.4 Dependency Security
+
+All third-party dependencies are pinned to exact versions in go.mod and
+package-lock.json. A nightly CI job runs Trivy and Grype scans on the
+container images for all services, reporting any CVEs with severity
+CRITICAL or HIGH to the security team. Dependencies with known CRITICAL
+CVEs are blocked from deployment via a CI/CD policy gate. The base
+container images use distroless variants
+(gcr.io/distroless/static-debian12) that contain no shell, no package
+manager, and no unnecessary binaries, reducing the attack surface of the
+container runtime.
+
+3.5 Audit Logging
+
+Every action performed in ModelVault is recorded in an immutable audit
+log stored in a separate PostgreSQL database (audit_db) with the
+following properties: append-only table (no UPDATE or DELETE permissions
+granted to any service account), each log entry is cryptographically
+chained to the previous entry using a hash of the previous record's
+content plus a server-side timestamp, making it tamper-evident. The
+audit log captures: the actor (user ID, service account ID, or system),
+the action (API method, internal event), the target resource (model ID,
+policy ID, user ID), the outcome (success or failure with error code),
+the source IP address, the user agent, and a full snapshot of the
+request payload (with sensitive fields like passwords and tokens
+redacted). Audit logs are retained for a minimum of 2 years and are
+replicated to a read replica in a separate availability zone for
+disaster recovery. A daily integrity verification job hashes all audit
+log entries from the previous day and compares the chain hash against
+the expected value, alerting the security team if any discrepancy is
+detected.
+
+4. Backend API Specification
+
+4.1 API Design Principles
+
+All external APIs follow RESTful conventions with OpenAPI 3.1
+specifications. Internal service-to-service communication uses gRPC with
+Protocol Buffers. The API versioning strategy uses URL path versioning
+(e.g., /api/v1/models). All responses use consistent JSON envelopes with
+the structure: { status, data, meta, errors }. Pagination uses
+cursor-based pagination (not offset-based) for all list endpoints,
+returning a next_cursor field. All timestamps are in UTC ISO 8601 format
+with millisecond precision. All IDs are UUIDv4. File upload endpoints
+use resumable uploads via the TUS protocol (tus.io) to support large
+model files up to 50GB with automatic retry on network interruption.
+
+4.2 Authentication Endpoints
+
+  ---------------------------------------------------------------------------------------------
+  Method            Endpoint                                Description       Auth Required
+  ----------------- --------------------------------------- ----------------- -----------------
+  POST              /api/v1/auth/login                      SRP-based login,  No
+                                                            returns access +  
+                                                            refresh tokens    
+
+  POST              /api/v1/auth/register                   Create account    No
+                                                            with email, name, 
+                                                            org name          
+
+  POST              /api/v1/auth/refresh                    Exchange refresh  Refresh token
+                                                            token for new     
+                                                            access token      
+
+  POST              /api/v1/auth/logout                     Revoke refresh    Access token
+                                                            token, clear      
+                                                            server-side       
+                                                            session           
+
+  POST              /api/v1/auth/oidc/{provider}            Redirect to OAuth No
+                                                            provider (Google, 
+                                                            GitHub, Okta)     
+
+  GET               /api/v1/auth/oidc/{provider}/callback   Handle OAuth      No
+                                                            callback, issue   
+                                                            tokens            
+
+  POST              /api/v1/auth/forgot-password            Send password     No
+                                                            reset email       
+                                                            (rate-limited     
+                                                            3/hour)           
+
+  POST              /api/v1/auth/reset-password             Reset password    Reset token
+                                                            using token from  
+                                                            email (SRP)       
+
+  GET               /api/v1/auth/me                         Get current user  Access token
+                                                            profile, org, and 
+                                                            role              
+
+  PUT               /api/v1/auth/me/password                Change password   Access token
+                                                            (requires current 
+                                                            password SRP      
+                                                            proof)            
+  ---------------------------------------------------------------------------------------------
+
+4.3 Model Artifact Endpoints
+
+  -------------------------------------------------------------------------------------------------------
+  Method            Endpoint                                     Description            Auth Required
+  ----------------- -------------------------------------------- ---------------------- -----------------
+  POST              /api/v1/models/upload                        Initiate TUS resumable Developer+
+                                                                 upload for model file  
+
+  PATCH             /api/v1/models/upload/{upload_id}            Upload chunk (TUS      Developer+
+                                                                 protocol)              
+
+  GET               /api/v1/models                               List models in org     Viewer+
+                                                                 (cursor-paginated,     
+                                                                 filterable)            
+
+  GET               /api/v1/models/{model_id}                    Get model metadata,    Viewer+
+                                                                 versions, signatures,  
+                                                                 scan status            
+
+  GET               /api/v1/models/{model_id}/download           Download model         Developer+
+                                                                 artifact               
+                                                                 (integrity-verified,   
+                                                                 signed URL)            
+
+  DELETE            /api/v1/models/{model_id}                    Soft-delete model and  Admin+
+                                                                 all associated data    
+
+  POST              /api/v1/models/{model_id}/sign               Sign model with        Developer+
+                                                                 keyless Sigstore-style 
+                                                                 signing                
+
+  GET               /api/v1/models/{model_id}/verify             Verify model signature Viewer+
+                                                                 and integrity hash     
+
+  GET               /api/v1/models/{model_id}/sbom               Get generated AI-SBOM  Viewer+
+                                                                 in CycloneDX JSON      
+                                                                 format                 
+
+  POST              /api/v1/models/{model_id}/scan               Trigger full scan      Developer+
+                                                                 (SBOM + sandbox +      
+                                                                 signature verify)      
+
+  GET               /api/v1/models/{model_id}/scan/{scan_id}     Get scan results with  Viewer+
+                                                                 detailed findings      
+
+  POST              /api/v1/models/{model_id}/sandbox            Provision sandbox, run Developer+
+                                                                 behavioral tests on    
+                                                                 model                  
+
+  GET               /api/v1/models/{model_id}/sandbox/{job_id}   Get sandbox results:   Viewer+
+                                                                 network calls, file    
+                                                                 access, triggers       
+  -------------------------------------------------------------------------------------------------------
+
+4.4 Organization and User Management Endpoints
+
+  ------------------------------------------------------------------------------------------
+  Method            Endpoint                             Description       Auth Required
+  ----------------- ------------------------------------ ----------------- -----------------
+  GET               /api/v1/org                          Get current       Viewer+
+                                                         organization      
+                                                         details and       
+                                                         settings          
+
+  PUT               /api/v1/org/settings                 Update org        Owner
+                                                         settings (name,   
+                                                         SSO config,       
+                                                         policies)         
+
+  GET               /api/v1/org/members                  List all members  Admin+
+                                                         with roles and    
+                                                         status            
+
+  POST              /api/v1/org/members/invite           Invite user by    Admin+
+                                                         email (sends      
+                                                         magic link)       
+
+  PATCH             /api/v1/org/members/{user_id}/role   Change member     Owner
+                                                         role              
+
+  DELETE            /api/v1/org/members/{user_id}        Remove member     Owner
+                                                         from org          
+
+  GET               /api/v1/org/api-keys                 List API keys     Admin+
+                                                         (last 4 chars     
+                                                         shown, full key   
+                                                         shown once)       
+
+  POST              /api/v1/org/api-keys                 Create new API    Admin+
+                                                         key (name,        
+                                                         expiry,           
+                                                         permissions)      
+
+  DELETE            /api/v1/org/api-keys/{key_id}        Revoke API key    Admin+
+                                                         immediately       
+  ------------------------------------------------------------------------------------------
+
+4.5 Registry and Policy Endpoints
+
+  -----------------------------------------------------------------------------------------------
+  Method            Endpoint                                Description         Auth Required
+  ----------------- --------------------------------------- ------------------- -----------------
+  GET               /api/v1/registries                      List registries in  Viewer+
+                                                            org                 
+
+  POST              /api/v1/registries                      Create new registry Admin+
+                                                            with policy         
+                                                            configuration       
+
+  GET               /api/v1/registries/{reg_id}             Get registry        Viewer+
+                                                            details, policy,    
+                                                            and artifact count  
+
+  PUT               /api/v1/registries/{reg_id}/policy      Update deployment   Admin+
+                                                            policy (OPA Rego    
+                                                            rules)              
+
+  POST              /api/v1/registries/{reg_id}/publish     Publish signed      Developer+
+                                                            model to registry   
+
+  GET               /api/v1/registries/{reg_id}/artifacts   List published      Viewer+
+                                                            artifacts with      
+                                                            versions            
+
+  POST              /api/v1/registries/{reg_id}/gate        Evaluate deployment Developer+
+                                                            gate for a model    
+                                                            version             
+
+  GET               /api/v1/audit                           Query audit log     Admin+
+                                                            (filterable,        
+                                                            cursor-paginated)   
+
+  GET               /api/v1/audit/export                    Export audit log as Admin+
+                                                            CSV (date range,    
+                                                            filters)            
+  -----------------------------------------------------------------------------------------------
+
+4.6 Key File Upload Process (TUS Resumable)
+
+Model file uploads use the TUS protocol to handle files up to 50GB
+reliably. The process works as follows: First, the client sends a POST
+to /api/v1/models/upload with headers specifying the file name, total
+size (Content-Length), and model format (X-Model-Format:
+safetensors|gguf|onnx|pytorch|custom). The server validates that the
+organization has not exceeded its storage quota, creates a database
+record for the upload with status 'pending', and returns a Location
+header with the upload URL containing a UUID upload_id. The server also
+returns an Upload-Length header confirming the expected size.
+
+Second, the client uploads the file in chunks by sending PATCH requests
+to the upload URL. Each PATCH includes a Content-Range header (e.g.,
+'bytes 0-5242879/524288000') and the raw binary chunk as the request
+body. The server writes each chunk to a staging area in MinIO using the
+multipart upload API. Each chunk is checksummed with SHA-256, and the
+partial checksums are stored in Redis. If a chunk upload fails (network
+error, timeout), the client retries that specific chunk. TUS handles
+this via the Upload-Offset header: the server tracks how many bytes have
+been received and tells the client where to resume.
+
+Third, when the final chunk is uploaded, the server concatenates all
+parts in MinIO, computes the final SHA-256 checksum of the complete
+file, and compares it against the checksum provided by the client in the
+Upload-Metadata header. If the checksums match, the upload status is set
+to 'complete', the file is moved from the staging bucket to the
+permanent storage bucket with a UUID-based path (e.g.,
+org/{org_id}/models/{model_id}/v1/artifact), and a model_version record
+is created in the database with the file size, format, SHA-256 hash,
+storage path, and upload timestamp. If the checksum does not match, the
+upload is marked 'failed' and all staged parts are deleted. The entire
+upload process generates audit log entries for initiation, each chunk,
+completion, or failure.
+
+5. Database Schema
+
+5.1 Schema Overview
+
+The database uses PostgreSQL 16 with nine logical databases (one per
+microservice plus a shared auth database). Each microservice owns its
+schema and has no cross-schema query access. Data that must be shared
+between services is replicated asynchronously via Kafka events. All
+tables use UUIDv4 primary keys. All timestamps are stored as TIMESTAMPTZ
+in UTC. Row-level security (RLS) is enabled on all tables that contain
+organization-scoped data, ensuring that a compromised service account
+can only access data belonging to the organization it is authorized for.
+
+5.2 Core Tables
+
+5.2.1 organizations
+
+  -----------------------------------------------------------------------------
+  Column                Type              Constraints         Description
+  --------------------- ----------------- ------------------- -----------------
+  id                    UUID              PK, DEFAULT         Organization
+                                          gen_random_uuid()   unique identifier
+
+  name                  VARCHAR(255)      NOT NULL,           Display name
+                                          CHECK(length > 0)   
+
+  slug                  VARCHAR(100)      UNIQUE, NOT NULL    URL-safe
+                                                              identifier
+
+  owner_id              UUID              NOT NULL, FK        Organization
+                                          users(id)           owner user
+                                                              reference
+
+  plan                  VARCHAR(50)       NOT NULL, DEFAULT   Pricing plan tier
+                                          'free'              
+
+  storage_quota_bytes   BIGINT            NOT NULL, DEFAULT   Max storage (10GB
+                                          10737418240         free)
+
+  storage_used_bytes    BIGINT            NOT NULL, DEFAULT 0 Current storage
+                                                              usage
+
+  max_members           INT               NOT NULL, DEFAULT 5 Max team members
+
+  sso_config            JSONB             NULL                OIDC/SAML
+                                                              configuration
+                                                              (encrypted)
+
+  created_at            TIMESTAMPTZ       NOT NULL, DEFAULT   Creation
+                                          now()               timestamp
+
+  updated_at            TIMESTAMPTZ       NOT NULL, DEFAULT   Last modification
+                                          now()               timestamp
+  -----------------------------------------------------------------------------
+
+5.2.2 users
+
+  ---------------------------------------------------------------------------------
+  Column                  Type              Constraints         Description
+  ----------------------- ----------------- ------------------- -------------------
+  id                      UUID              PK, DEFAULT         User unique
+                                            gen_random_uuid()   identifier
+
+  email                   VARCHAR(255)      UNIQUE, NOT NULL    Email address
+                                                                (login)
+
+  password_verifier       BYTEA             NOT NULL            SRP verifier
+                                                                (scrypt-derived,
+                                                                never plaintext)
+
+  password_salt           BYTEA             NOT NULL            SRP salt
+
+  name                    VARCHAR(255)      NOT NULL            Display name
+
+  avatar_url              VARCHAR(1024)     NULL                Profile picture URL
+
+  mfa_enabled             BOOLEAN           NOT NULL, DEFAULT   Is TOTP MFA active
+                                            false               
+
+  mfa_secret_encrypted    BYTEA             NULL                TOTP secret
+                                                                (Vault-encrypted)
+
+  last_login_at           TIMESTAMPTZ       NULL                Last successful
+                                                                login
+
+  failed_login_attempts   INT               NOT NULL, DEFAULT 0 Consecutive failed
+                                                                logins
+
+  locked_until            TIMESTAMPTZ       NULL                Account lock expiry
+                                                                (NULL = unlocked)
+
+  created_at              TIMESTAMPTZ       NOT NULL, DEFAULT   Creation timestamp
+                                            now()               
+  ---------------------------------------------------------------------------------
+
+5.2.3 org_members
+
+  ----------------------------------------------------------------------------------------------
+  Column               Type              Constraints       Description
+  -------------------- ----------------- ----------------- -------------------------------------
+  id                   UUID              PK                Membership unique ID
+
+  org_id               UUID              FK orgs(id), NOT  Organization reference
+                                         NULL              
+
+  user_id              UUID              FK users(id), NOT User reference
+                                         NULL              
+
+  role                 VARCHAR(50)       NOT NULL,         owner|admin|developer|viewer|custom
+                                         CHECK(role IN     
+                                         (...))            
+
+  custom_permissions   JSONB             NULL              Custom role permissions array
+
+  invited_by           UUID              FK users(id), NOT Who invited this member
+                                         NULL              
+
+  accepted_at          TIMESTAMPTZ       NULL              When invite was accepted
+
+  UNIQUE(org_id,                         One membership    
+  user_id)                               per user per org  
+  ----------------------------------------------------------------------------------------------
+
+5.2.4 models
+
+  --------------------------------------------------------------------------------------------------------------------
+  Column              Type              Constraints           Description
+  ------------------- ----------------- --------------------- --------------------------------------------------------
+  id                  UUID              PK                    Model unique identifier
+
+  org_id              UUID              FK orgs(id), NOT      Owning organization
+                                        NULL, RLS             
+
+  name                VARCHAR(255)      NOT NULL              Model display name
+
+  description         TEXT              NULL                  Model description
+
+  source_url          VARCHAR(2048)     NULL                  Original source (e.g., HuggingFace URL)
+
+  format              VARCHAR(50)       NOT NULL              safetensors|gguf|onnx|pytorch|custom
+
+  latest_version_id   UUID              FK                    Current active version
+                                        model_versions(id),   
+                                        NULL                  
+
+  status              VARCHAR(50)       NOT NULL, DEFAULT     uploading|scanning|signed|quarantined|published|failed
+                                        'uploading'           
+
+  created_by          UUID              FK users(id), NOT     Upload user
+                                        NULL                  
+
+  created_at          TIMESTAMPTZ       NOT NULL, DEFAULT     Creation timestamp
+                                        now()                 
+
+  updated_at          TIMESTAMPTZ       NOT NULL, DEFAULT     Last status change
+                                        now()                 
+
+  deleted_at          TIMESTAMPTZ       NULL                  Soft-delete timestamp (NULL = active)
+  --------------------------------------------------------------------------------------------------------------------
+
+5.2.5 model_versions
+
+  --------------------------------------------------------------------------------------------------
+  Column             Type              Constraints       Description
+  ------------------ ----------------- ----------------- -------------------------------------------
+  id                 UUID              PK                Version unique identifier
+
+  model_id           UUID              FK models(id),    Parent model
+                                       NOT NULL          
+
+  version            VARCHAR(50)       NOT NULL          Semantic version (e.g., 1.0.0)
+
+  storage_path       VARCHAR(1024)     NOT NULL          MinIO object path
+
+  file_size_bytes    BIGINT            NOT NULL          File size in bytes
+
+  sha256_hash        VARCHAR(64)       NOT NULL          SHA-256 of the complete file
+
+  sha512_hash        VARCHAR(128)      NOT NULL          SHA-512 for collision resistance
+
+  merkle_root        VARCHAR(64)       NOT NULL          Merkle tree root of chunk hashes
+
+  signature_id       UUID              FK                Signing record reference
+                                       signatures(id),   
+                                       NULL              
+
+  sbom_id            UUID              FK sboms(id),     Generated SBOM reference
+                                       NULL              
+
+  scan_status        VARCHAR(50)       NOT NULL, DEFAULT pending|in_progress|passed|failed|warning
+                                       'pending'         
+
+  scan_result_json   JSONB             NULL              Detailed scan/findings result
+
+  uploaded_at        TIMESTAMPTZ       NOT NULL, DEFAULT Upload completion time
+                                       now()             
+
+  UNIQUE(model_id,                     One version per   
+  version)                             model             
+  --------------------------------------------------------------------------------------------------
+
+5.2.6 signatures
+
+  -------------------------------------------------------------------------------
+  Column                Type              Constraints           Description
+  --------------------- ----------------- --------------------- -----------------
+  id                    UUID              PK                    Signature record
+                                                                ID
+
+  model_version_id      UUID              FK                    Signed model
+                                          model_versions(id),   version
+                                          NOT NULL              
+
+  signer_identity       VARCHAR(255)      NOT NULL              OIDC identity
+                                                                (email or service
+                                                                account)
+
+  signer_key_id         VARCHAR(255)      NOT NULL              Fulcio
+                                                                certificate key
+                                                                ID
+
+  signature_algorithm   VARCHAR(50)       NOT NULL              ecdsa-sha2-256
+
+  signature_value       BYTEA             NOT NULL              Raw signature
+                                                                bytes
+
+  certificate_chain     BYTEA             NOT NULL              X.509 certificate
+                                                                chain (DER)
+
+  signed_at             TIMESTAMPTZ       NOT NULL, DEFAULT     Signing timestamp
+                                          now()                 
+
+  verified              BOOLEAN           NOT NULL, DEFAULT     Has signature
+                                          false                 been verified
+  -------------------------------------------------------------------------------
+
+5.2.7 sboms
+
+  ------------------------------------------------------------------------------------
+  Column                Type              Constraints           Description
+  --------------------- ----------------- --------------------- ----------------------
+  id                    UUID              PK                    SBOM record ID
+
+  model_version_id      UUID              FK                    Model version this
+                                          model_versions(id),   SBOM describes
+                                          NOT NULL              
+
+  format                VARCHAR(50)       NOT NULL              cyclonedx-ml-bom-1.0
+
+  bom_json              JSONB             NOT NULL              Complete SBOM document
+
+  dependency_count      INT               NOT NULL, DEFAULT 0   Total dependencies
+                                                                found
+
+  vulnerability_count   INT               NOT NULL, DEFAULT 0   Dependencies with
+                                                                known CVEs
+
+  generated_at          TIMESTAMPTZ       NOT NULL, DEFAULT     Generation timestamp
+                                          now()                 
+  ------------------------------------------------------------------------------------
+
+5.2.8 sandbox_jobs
+
+  -------------------------------------------------------------------------------------------------------------------
+  Column             Type              Constraints           Description
+  ------------------ ----------------- --------------------- --------------------------------------------------------
+  id                 UUID              PK                    Sandbox job ID
+
+  model_version_id   UUID              FK                    Model version being tested
+                                       model_versions(id),   
+                                       NOT NULL              
+
+  status             VARCHAR(50)       NOT NULL, DEFAULT     queued|provisioning|running|completed|failed|cancelled
+                                       'queued'              
+
+  vm_id              VARCHAR(128)      NULL                  Firecracker VM identifier
+
+  config_json        JSONB             NOT NULL              Sandbox configuration (timeout, memory, network policy)
+
+  result_json        JSONB             NULL                  Behavioral test results (network, file, triggers)
+
+  started_at         TIMESTAMPTZ       NULL                  VM start time
+
+  completed_at       TIMESTAMPTZ       NULL                  VM teardown time
+
+  duration_ms        INT               NULL                  Total execution duration
+
+  submitted_by       UUID              FK users(id), NOT     User who triggered the sandbox
+                                       NULL                  
+  -------------------------------------------------------------------------------------------------------------------
+
+5.2.9 audit_log
+
+  -------------------------------------------------------------------------------------------
+  Column             Type              Constraints       Description
+  ------------------ ----------------- ----------------- ------------------------------------
+  id                 BIGSERIAL         PK                Auto-incrementing log ID
+
+  timestamp          TIMESTAMPTZ       NOT NULL, DEFAULT Event timestamp (UTC, ms precision)
+                                       now()             
+
+  actor_id           UUID              NOT NULL          User or service account that
+                                                         performed the action
+
+  actor_type         VARCHAR(20)       NOT NULL          user|service|system
+
+  action             VARCHAR(255)      NOT NULL          Action performed (e.g.,
+                                                         model.upload.initiate)
+
+  resource_type      VARCHAR(50)       NOT NULL          model|user|org|policy|api_key|scan
+
+  resource_id        UUID              NOT NULL          ID of the affected resource
+
+  outcome            VARCHAR(20)       NOT NULL          success|failure|denied
+
+  error_code         VARCHAR(50)       NULL              Error code if outcome=failure
+
+  source_ip          INET              NOT NULL          Client IP address
+
+  user_agent         VARCHAR(1024)     NULL              Client user agent string
+
+  request_snapshot   JSONB             NULL              Redacted request payload
+
+  prev_hash          VARCHAR(64)       NOT NULL          Hash of previous log entry (chain
+                                                         integrity)
+
+  entry_hash         VARCHAR(64)       NOT NULL          Hash of this log entry (SHA-256)
+  -------------------------------------------------------------------------------------------
+
+The audit_log table is append-only. The PostgreSQL role used by the
+audit-service has INSERT-only permissions on this table. No UPDATE or
+DELETE grants exist. The prev_hash and entry_hash columns create a
+cryptographic chain: each entry's entry_hash is computed as
+SHA-256(prev_hash || timestamp || actor_id || action || resource_id ||
+outcome). A daily verification job computes the expected chain and
+compares it against the stored hashes, alerting on any tampering.
+
+6. Feature Specifications
+
+6.1 Feature 1: Model Signing and Verification
+
+6.1.1 How Model Signing Works
+
+Model signing implements a Sigstore-inspired keyless signing workflow.
+When a user clicks 'Sign Model' on a model version, the following
+process executes: The signing-service receives a sign request containing
+the model_version_id and the user's JWT access token. The service first
+retrieves the model's SHA-256 and Merkle root hash from the
+model_versions table. It then constructs a signing payload that includes
+the model ID, version string, SHA-256 hash, Merkle root, file size,
+format, and the current timestamp. This payload is serialized to JSON
+and canonicalized (sorted keys, no whitespace) to ensure deterministic
+hashing. The payload is then hashed with SHA-256 to produce the digest
+that will be signed.
+
+The signing-service generates a short-lived ephemeral key pair (ECDSA
+P-256) for this signing operation. It then contacts the Fulcio
+certificate authority (or an internal Fulcio-compatible CA for
+self-hosted deployments) with an OIDC identity token (obtained from the
+user's session) and the ephemeral public key. Fulcio issues a
+short-lived X.509 certificate that binds the ephemeral public key to the
+user's OIDC identity (email). The signing-service signs the payload
+digest with the ephemeral private key, producing an ECDSA-SHA256
+signature. The signature, the X.509 certificate chain, and the signing
+payload are all stored in the signatures table. The ephemeral private
+key is then securely erased from memory. The certificate chain is also
+submitted to a Rekor transparency log (or an internal immutable log for
+self-hosted deployments), which returns a signed inclusion proof.
+
+Verification reverses this process: given a model file and a signature
+record, the system recomputes the SHA-256 hash of the file, reconstructs
+the signing payload, verifies the ECDSA signature against the X.509
+certificate from the stored certificate chain, validates that the
+certificate was issued by a trusted CA, checks that the certificate has
+not expired, and optionally verifies the Rekor inclusion proof. If all
+checks pass, the verification returns 'VERIFIED' with the signer's
+identity. If any check fails, it returns 'FAILED' with a specific reason
+(hash mismatch, signature invalid, certificate expired, untrusted CA,
+etc.).
+
+6.1.2 Merkle Tree Integrity
+
+During upload, the model file is split into 4MB chunks. Each chunk is
+hashed with SHA-256, producing a list of leaf hashes. These leaf hashes
+are arranged into a binary Merkle tree: pairs of leaf hashes are
+concatenated and hashed to produce parent nodes, up to a single root
+hash. The Merkle root is stored in the model_versions table alongside
+the flat SHA-256 of the complete file. During verification, both the
+flat hash and the Merkle root are verified. The Merkle tree enables
+efficient proof that a specific chunk of the model file has not been
+tampered with, without requiring the entire file to be re-downloaded.
+This is particularly useful for partial model updates and for verifying
+models in distributed storage systems where different chunks may reside
+on different nodes.
+
+6.2 Feature 2: AI-SBOM Generation
+
+6.2.1 How SBOM Generation Works
+
+AI-SBOM generation is a fully deterministic, non-AI process that uses
+static analysis to extract metadata from model artifact files. When a
+model is uploaded (or when the user explicitly triggers SBOM
+generation), the sbom-service retrieves the model file from MinIO and
+analyzes it based on its detected format. The analysis extracts: model
+architecture metadata (number of layers, parameter count, tensor
+dimensions, dtype), the complete dependency tree of Python packages
+required to load and run the model (extracted from any embedded
+requirements.txt, setup.py, pyproject.toml, or from the model card
+metadata), a list of all third-party model components (base model
+references, adapter configurations, tokenizer files), hardware
+requirements (inferred from tensor sizes and dtype), and training data
+provenance metadata if available from the model card or embedded
+metadata.
+
+For SafeTensors format files, the parser reads the JSON header at the
+start of the file, which contains the tensor metadata including names,
+shapes, and dtypes. It calculates the total parameter count by
+multiplying the dimensions of each tensor. It identifies the model
+architecture by matching tensor naming patterns (e.g.,
+'transformer.h.{N}.attn.c_attn.weight' indicates a GPT-2 style
+architecture). For GGUF files, the parser reads the GGUF header which
+contains key-value metadata including the model architecture,
+quantization level, and embedding dimensions. For ONNX files, the parser
+uses the ONNX protobuf schema to read the model graph, extracting
+operation types, input/output shapes, and opset version. For PyTorch
+.bin or .pt files, the parser loads the file using PyTorch's safe_load
+function (which uses zip-based inspection without executing any code)
+and extracts the state dict keys, tensor shapes, and dtypes.
+
+After extraction, the sbom-service cross-references all discovered
+dependencies against the OSV (Open Source Vulnerabilities) database API
+to identify known vulnerabilities. Each dependency is looked up by its
+package name and version. If a CVE is found, it is recorded with its
+severity (CRITICAL, HIGH, MEDIUM, LOW), CVSS score, and a link to the
+advisory. The final SBOM is output in CycloneDX ML-BOM 1.0 JSON format,
+which extends the standard CycloneDX format with ML-specific fields
+including model architecture, parameter count, training data provenance,
+and hardware requirements. The SBOM JSON is stored in the sboms table
+and is also available for download via the API endpoint GET
+/api/v1/models/{model_id}/sbom.
+
+6.3 Feature 3: Pre-Deployment Quarantine Sandbox
+
+6.3.1 Sandbox Architecture
+
+The quarantine sandbox is the most critical security feature of
+ModelVault. It provides a completely isolated execution environment
+where a model is loaded and exercised with a battery of behavioral tests
+to detect malicious behavior before the model is approved for
+deployment. The sandbox uses Firecracker microVMs, which are lightweight
+virtual machines that boot in under 125 milliseconds with a dedicated
+kernel, providing hardware-level isolation from the host system. Each
+sandbox job gets its own Firecracker VM with a minimal root filesystem
+(based on Alpine Linux, approximately 5MB), a Python runtime (CPython
+3.12), a PyTorch/CUDA runtime (only CPU mode for security), and the
+model file under test.
+
+The VM is configured with a strict network policy enforced by iptables:
+all outbound network connections are blocked by default. The only
+allowed outbound traffic is a DNS resolution to a mock DNS server that
+returns NXDOMAIN for all queries, used to test whether the model
+attempts to perform DNS lookups (which would indicate potential data
+exfiltration). All file system access is monitored using eBPF programs
+attached to the VFS layer, which capture every open(), read(), write(),
+and unlink() syscall with the full path, flags, and return value. The
+eBPF programs are compiled from BPF C code using the bcc toolkit and
+loaded into the VM's kernel at boot time. Syscall events are streamed to
+a sidecar process over a virtio-serial channel, which aggregates them
+and writes the structured event stream to the sandbox_jobs.result_json
+field in the database.
+
+6.3.2 Behavioral Test Suite
+
+The sandbox runs a deterministic sequence of tests against the loaded
+model. No test uses AI or machine learning; all tests are rule-based and
+produce deterministic pass/fail results. The test suite consists of the
+following checks, each producing a structured finding with severity,
+description, and evidence:
+
+  --------------------------------------------------------------------------------------
+  Test              What It Does             Failure Severity  Detection Method
+  ----------------- ------------------------ ----------------- -------------------------
+  Network Egress    Monitors all outbound    CRITICAL          eBPF on connect()
+  Test              network connections                        syscall + iptables log
+                    during model load and                      
+                    inference                                  
+
+  DNS Resolution    Detects any DNS queries  HIGH              Mock DNS server + eBPF on
+  Test              made by the model or its                   getaddrinfo()
+                    dependencies                               
+
+  File System       Monitors all file        CRITICAL          eBPF on
+  Access Test       reads/writes outside the                   open()/write()/unlink()
+                    model's working                            
+                    directory                                  
+
+  Environment       Checks if model accesses HIGH              eBPF on read env + Python
+  Variable          env vars beyond allowed                    monkeypatching of
+  Exfiltration      list (HOME, PATH,                          os.environ
+                    TMPDIR)                                    
+
+  Process Fork/Exec Detects if the model     CRITICAL          eBPF on
+  Test              spawns subprocesses or                     fork()/execve()/clone()
+                    executes shell commands                    
+
+  Memory Bounds     Monitors RSS memory      MEDIUM            cgroup memory
+  Test              growth; flags if model                     controller + periodic
+                    uses more than 2x                          /proc/self/status read
+                    expected RAM                               
+
+  CPU Timeout Test  Kills model if single    LOW               timerfd + SIGKILL
+                    inference call takes                       
+                    more than configured                       
+                    timeout (default 60s)                      
+
+  Input Trigger     Sends adversarial inputs CRITICAL          Predefined trigger set +
+  Test              (specific byte patterns)                   output diff against
+                    to detect hidden                           baseline
+                    backdoor triggers                          
+
+  Output Entropy    Analyzes output          MEDIUM            Shannon entropy
+  Test              distribution for                           calculation on output
+                    suspiciously uniform or                    tokens/logits
+                    constant outputs (model                    
+                    collapse)                                  
+
+  Dependency Import Logs all Python imports  HIGH              Python importlib hook +
+  Test              during model load; flags                   allowed import list
+                    unexpected/suspicious                      
+                    imports                                    
+
+  Randomness Source Checks if model          HIGH              Python module
+  Test              overrides Python's                         monkeypatching detection
+                    random/urandom/secrets                     
+                    modules                                    
+
+  Disk Write Test   Measures total bytes     MEDIUM            eBPF write() byte counter
+                    written to disk; flags                     
+                    if model writes more                       
+                    than 10MB                                  
+  --------------------------------------------------------------------------------------
+
+Each test runs sequentially. If a CRITICAL test fails, the remaining
+tests are still executed (to gather maximum information) but the overall
+sandbox result is marked 'FAILED'. The VM is terminated after all tests
+complete or after a hard timeout (configurable, default 10 minutes). The
+VM's memory is scrubbed (zeroed) before the Firecracker process exits.
+All test results, eBPF event logs, and timing data are aggregated into a
+structured JSON result document stored in sandbox_jobs.result_json. This
+document is immutable once written and is viewable in the frontend
+sandbox results page.
+
+6.3.3 Sandbox Job Lifecycle
+
+A sandbox job goes through the following lifecycle states: QUEUED (job
+created, waiting for a VM slot), PROVISIONING (Firecracker VM is being
+created and the model file is being copied into the VM's rootfs),
+RUNNING (all behavioral tests are executing inside the VM), COMPLETED
+(all tests finished, results captured, VM terminated), FAILED (VM
+crashed, timeout, or internal error), CANCELLED (user cancelled the job
+before completion). The sandbox-service maintains a pool of
+pre-provisioned VM slots (configurable, default 4 per node) to minimize
+provisioning latency. When a job is QUEUED, it is assigned to the next
+available slot. If no slot is available within 30 seconds, the job
+remains in QUEUED status and the frontend displays a queue position
+indicator. The user can cancel a QUEUED or PROVISIONING job, but not a
+RUNNING job (they must wait for it to complete). Job lifecycle state
+transitions are all recorded in the audit log.
+
+6.4 Feature 4: Secure Model Artifact Registry
+
+6.4.1 Registry Design
+
+The registry is an organization-scoped collection of model artifacts
+that have been signed, scanned, and approved for deployment. Each
+organization can create one or more registries (e.g., 'production',
+'staging', 'development'). Each registry has a deployment policy defined
+in OPA (Open Policy Agent) Rego language that specifies the conditions
+under which a model version is allowed to be published to that registry.
+A deployment policy is a set of rules that are evaluated against the
+model's metadata, scan results, signature status, and SBOM findings.
+
+A typical production registry policy might require: the model must have
+a valid signature from an approved signer identity (e.g., any user with
+the 'developer' role or higher), the sandbox scan must have completed
+with no CRITICAL findings and no more than 2 HIGH findings, the SBOM
+must have zero CRITICAL or HIGH CVEs, the model must have been uploaded
+by a member who has been in the organization for at least 7 days (to
+prevent insider threat from newly invited accounts), and the model
+format must be one of the approved formats (safetensors, onnx). If any
+of these conditions is not met, the deployment gate returns 'BLOCKED'
+with a detailed explanation of which policy rule failed and why.
+
+6.4.2 Policy Engine
+
+The policy engine is implemented using OPA (Open Policy Agent) embedded
+as a library within the registry-service. Each registry stores its
+policy as a Rego document in the database. When a user requests to
+publish a model or evaluate a deployment gate, the registry-service
+gathers all relevant data (model metadata, signature status, scan
+results, SBOM findings, user membership duration, organization settings)
+and constructs an input document. This input document is evaluated
+against the Rego policy using OPA's Eval function. The policy returns a
+decision (ALLOW, DENY) and a list of reasons. The decision, reasons, and
+full input document are stored in an immutable policy_evaluation record
+in the audit log.
+
+The OPA policy is exposed in the frontend as a code editor with Rego
+syntax highlighting and linting. Admins can write, test, and save
+policies directly in the UI. A 'Test Policy' button allows admins to
+evaluate a draft policy against a selected model version without
+publishing, showing the simulated decision and reasons. This allows
+policy authors to iterate on policies safely before they go live. When a
+policy is saved, the previous version is archived (never deleted) and
+the change is recorded in the audit log with the full before-and-after
+Rego source.
+
+6.5 Feature 5: CI/CD Integration
+
+6.5.1 GitHub Actions Integration
+
+ModelVault provides a GitHub Actions composite action
+(modelvault/security-scan) that integrates model verification into CI/CD
+pipelines. The action is distributed via the GitHub Marketplace and
+installed by adding a step to a workflow file. The action authenticates
+using an organization API key (stored as a GitHub secret), uploads the
+model file to ModelVault, triggers a full scan (SBOM generation +
+sandbox behavioral tests), waits for the scan to complete (with
+configurable timeout), and checks the scan result. If the scan finds any
+CRITICAL issues, the action fails the workflow, preventing the model
+from being deployed. If the scan passes, the action returns the model
+ID, version ID, and signature URL as outputs that downstream workflow
+steps can reference.
+
+The action supports three modes: 'scan-only' (upload, scan, report
+results), 'scan-and-sign' (scan, and if it passes, automatically sign
+the model with the CI bot's identity), and 'scan-sign-publish' (scan,
+sign, and publish to a specified registry if the deployment gate
+passes). The mode is configured via the 'mode' action input parameter.
+The action also supports uploading models from specific paths, from
+HuggingFace model hub URLs (the action downloads the model from
+HuggingFace and uploads it to ModelVault for scanning), and from
+S3-compatible storage URLs. All authentication is handled via the
+MODELVAULT_API_KEY secret, which is an organization-scoped API key
+created in the ModelVault dashboard.
+
+6.5.2 GitLab CI and Generic Webhook Integration
+
+For GitLab CI, ModelVault provides a Docker image (modelvault/cli) that
+wraps the same functionality as the GitHub Action. The image is used in
+a .gitlab-ci.yml job with the same three modes (scan-only,
+scan-and-sign, scan-sign-publish). For CI systems that do not support
+container-based actions (Jenkins, CircleCI, Buildkite), ModelVault
+provides a CLI tool (npm install -g @modelvault/cli) that can be invoked
+as a shell command. The CLI authenticates via environment variables
+(MODELVAULT_API_KEY, MODELVAULT_API_URL) and provides the same upload,
+scan, sign, and publish commands. All CLI commands output structured
+JSON for easy parsing by CI scripts.
+
+6.6 Feature 6: Dashboard and Analytics
+
+The dashboard provides organization-level visibility into all model
+security activities. It displays: total models under management, total
+storage used vs. quota, scan pass/fail/warning rates over time (line
+chart), most common finding types (bar chart), SBOM vulnerability
+severity distribution (donut chart), average sandbox execution time, and
+a live activity feed showing recent uploads, scans, signatures, and
+policy evaluations. All dashboard data is fetched via dedicated
+read-optimized API endpoints that query materialized views in the
+database, ensuring fast page loads even for organizations with thousands
+of models. The dashboard refreshes automatically every 30 seconds via
+polling (no WebSocket complexity). Each chart is interactive: clicking
+on a bar or slice navigates to the filtered list view (e.g., clicking
+the 'CRITICAL' slice of the vulnerability donut chart navigates to the
+models list filtered to models with CRITICAL SBOM findings).
+
+7. Frontend Specification
+
+7.1 Technology and Design System
+
+The frontend is built with Next.js 15 using the App Router, React 19,
+TypeScript 5.6, Tailwind CSS 4, and shadcn/ui component primitives built
+on Radix UI. The design system uses a dark theme as the primary theme
+(appropriate for a security-focused developer tool) with a light theme
+toggle. The color palette uses the Lapis Tech scheme: deep navy
+backgrounds (#0A0E1A for the main app shell, #111827 for card surfaces),
+with electric indigo accents (#667eea) for primary actions and
+interactive elements, green (#22C55E) for success/passed states, red
+(#EF4444) for critical/failed states, amber (#F59E0B) for warning
+states, and gray (#6B7280) for neutral/secondary text. Typography uses
+Inter for body text and JetBrains Mono for code, logs, and technical
+identifiers. All components are fully accessible with keyboard
+navigation, ARIA labels, and screen reader support.
+
+7.2 Page Specifications
+
+7.2.1 Landing Page (/)
+
+The landing page is a public-facing marketing page with the following
+sections: a hero section with a bold headline ('The Sigstore for AI
+Models'), a subheadline explaining the value proposition in one
+sentence, a primary CTA button ('Start Free' which navigates to
+/register) and a secondary CTA button ('Contact Sales' which navigates
+to /contact), a visual showing the model signing flow as an animated
+diagram (pure CSS animation, no JS library), a features grid showing the
+four core pillars with icons and short descriptions, a 'How It Works'
+section with a 3-step visual process (Upload, Scan, Deploy), a security
+architecture overview section, and a footer with links to documentation,
+pricing, status page, and contact. The landing page is statically
+generated at build time (no server-side rendering needed) for maximum
+performance.
+
+7.2.2 Authentication Pages (/login, /register, /forgot-password,
+/reset-password)
+
+The login page displays an email input field and a password input field
+with a 'Sign In' button. Below the form, there are 'Sign in with Google'
+and 'Sign in with GitHub' buttons for OIDC authentication. The form
+validates that both fields are non-empty and the email format is valid
+before submission. On submit, the form sends a POST to
+/api/v1/auth/login with the SRP protocol flow. On success, the access
+token is stored in memory (Zustand store), the refresh token is stored
+in an HTTP-only Secure SameSite=Strict cookie (set by the server), and
+the user is redirected to /dashboard. On failure, the form displays the
+error message below the password field. The register page has email,
+name, organization name, and password fields, with the same OIDC
+buttons. The forgot-password page has only an email field. The
+reset-password page has a new password and confirm password field, and
+reads the reset token from the URL query parameter.
+
+7.2.3 Dashboard Page (/dashboard)
+
+The dashboard page is the main hub after login. It consists of: a top
+navigation bar with the ModelVault logo (links to /dashboard), a
+'Models' link, a 'Registries' link, an 'Audit Log' link, a notification
+bell icon with unread count badge, and a user avatar dropdown (Profile,
+Settings, Logout). Below the nav, there are four summary stat cards at
+the top: Total Models (with a trend indicator showing change from last
+month), Scan Pass Rate (percentage with a small sparkline), Active
+Alerts (count of CRITICAL/HIGH findings across all models), and Storage
+Used (with a progress bar showing percentage of quota). Below the stats,
+there are two columns: the left column (60% width) shows a 'Recent
+Activity' feed listing the last 20 events (uploads, scans, signatures,
+policy evaluations) with timestamps, actor names, and outcome badges.
+The right column (40% width) shows two charts: Scan Results Over Time (a
+line chart showing daily pass/fail/warning counts for the last 30 days)
+and Vulnerability Distribution (a donut chart showing
+CRITICAL/HIGH/MEDIUM/LOW/NONE counts from SBOM scans). All data is
+fetched via TanStack Query with 30-second automatic refetch.
+
+7.2.4 Models List Page (/models)
+
+The models list page shows a searchable, filterable, sortable table of
+all models in the organization. The table columns are: Model Name (with
+format badge), Version (latest version), Status (colored badge:
+green=signed, blue=scanning, red=failed, gray=uploading), Last Scan
+(relative timestamp), SBOM Findings (severity badge with count), and
+Actions (dropdown: View, Sign, Scan, Sandbox, Delete). Above the table,
+there is a search input (searches model name and description), filter
+dropdowns for Status, Format, and Scan Result, and a 'Upload Model'
+button in the top right that opens a modal. The table uses cursor-based
+pagination with 'Load More' button at the bottom. Clicking a model name
+navigates to /models/{model_id}.
+
+7.2.5 Model Detail Page (/models/{model_id})
+
+The model detail page is the most feature-rich page. It has a tabbed
+layout with four tabs: Overview, Versions, Scan Results, and Sandbox.
+The Overview tab shows the model name, description, source URL (if
+imported from HuggingFace), creation date, and the current status badge.
+Below that, it shows three cards: Signature Status (shows signer
+identity, signing date, verification status with a 'Verify Now' button),
+SBOM Summary (shows total dependencies, vulnerability counts by
+severity, and a 'View Full SBOM' button that opens a modal with the
+complete CycloneDX JSON, syntax highlighted), and Latest Scan Result
+(shows overall pass/fail/warning with a link to the Scan Results tab).
+
+The Versions tab shows a list of all versions of this model in a table
+with columns: Version (semver), File Size, SHA-256 (truncated with copy
+button), Upload Date, Signature Status (badge), and Actions. Each
+version can be downloaded (generates a signed, time-limited MinIO
+pre-signed URL valid for 1 hour), verified independently, or compared
+against another version (opens a diff view showing side-by-side metadata
+comparison and SHA-256 differences). The Scan Results tab shows a
+chronological list of all scans run on each version, with expandable
+detail panels showing the full result JSON. The Sandbox tab shows a list
+of all sandbox jobs with expandable result panels showing the behavioral
+test results in a structured format: each test name, status (PASS/FAIL),
+severity, description, and evidence (e.g., the specific syscall that was
+captured).
+
+7.2.6 Upload Model Modal
+
+The upload modal is opened by clicking 'Upload Model' on the models
+page. It has the following fields: Model Name (text input, required),
+Description (textarea, optional), Source URL (text input, optional,
+pre-filled if importing from HuggingFace), Model Format (dropdown:
+SafeTensors, GGUF, ONNX, PyTorch, Custom). Below the form fields, there
+is a drag-and-drop file upload zone (supports click-to-browse as well).
+When a file is dropped or selected, the upload begins immediately using
+the TUS protocol. A progress bar shows the upload percentage, upload
+speed, and estimated time remaining. If the upload is interrupted
+(network error, browser crash), the user can return to the upload modal
+and the TUS client will automatically resume from the last byte. After
+the upload completes, the modal closes and the user is navigated to the
+new model's detail page, where the scan is automatically triggered.
+
+7.2.7 Registries Page (/registries)
+
+The registries page shows all registries in the organization as cards.
+Each card shows the registry name, description, artifact count, and the
+date of the last publication. Clicking a registry navigates to
+/registries/{reg_id}, which shows the registry's policy (Rego code in a
+read-only code block with syntax highlighting, with an 'Edit Policy'
+button for Admins), a list of published artifacts (table with model
+name, version, publish date, and signer), and a 'Publish Model' button
+that opens a modal where the user selects a model version from a
+searchable dropdown. The modal then evaluates the deployment gate and
+shows the result: either 'PUBLISHED' with a green checkmark, or
+'BLOCKED' with a detailed list of which policy rules failed and why,
+each shown as a red-bordered card with the rule name and explanation.
+
+7.2.8 Audit Log Page (/audit)
+
+The audit log page is accessible only to Admin and Owner roles. It shows
+a full-text searchable, filterable table of all audit log entries.
+Filters include: date range (date picker for start and end), actor (user
+name search), action type (dropdown: all, model.upload, model.sign,
+model.scan, sandbox.start, policy.evaluate, user.invite, etc.), resource
+type (dropdown), and outcome (dropdown: all, success, failure, denied).
+The table columns are: Timestamp (ISO 8601), Actor (user name or service
+account), Action, Resource (type and ID, clickable), Outcome (colored
+badge), and Source IP. The table uses cursor-based pagination with a
+'Load More' button. An 'Export CSV' button in the top right triggers a
+download of the currently filtered audit log entries as a CSV file,
+generated server-side by the audit-service.
+
+7.2.9 Organization Settings Page (/org/settings)
+
+The settings page is accessible to Owners and Admins. It has tabs for
+General, Members, API Keys, and Security. The General tab shows the
+organization name, slug, and plan tier (with 'Contact Sales' CTA for
+upgrades). The Members tab shows a list of all organization members in a
+table with columns: Name, Email, Role (dropdown to change for
+Admins/Owners), Joined Date, and a 'Remove' button (Owners only). There
+is an 'Invite Member' button that opens a modal with an email input and
+a role dropdown. The API Keys tab shows a list of API keys (masked,
+showing only the last 4 characters and the creation date) with 'Revoke'
+buttons and a 'Create API Key' button that opens a modal with a name
+input, expiration date picker, and a permissions checklist. The Security
+tab shows SSO configuration (OIDC provider setup with client ID, client
+secret, issuer URL fields), MFA enforcement toggle (when enabled, all
+members must have MFA active), and session management (default session
+duration, max concurrent sessions per user).
+
+8. Infrastructure and Deployment
+
+8.1 Kubernetes Deployment Architecture
+
+ModelVault is deployed on a Kubernetes 1.31 cluster with a minimum of 5
+nodes for production: 2 application nodes (c5.2xlarge or equivalent), 1
+database node (r6i.2xlarge with NVMe SSD), 1 sandbox node (m5.2xlarge
+with additional RAM for Firecracker VMs), and 1 monitoring/ingress node
+(c5.large). All nodes run a hardened container-optimized OS
+(Bottlerocket or Flatcar Container Linux) with read-only root
+filesystem, no SSH access (using eksctl/kubectl for management), and
+kernel boot parameters that enable eBPF and seccomp. The cluster uses
+Kubernetes NetworkPolicy enforced by Calico CNI, with Istio 1.24 service
+mesh for mTLS. Pod Security Standards are enforced at the namespace
+level: all application namespaces use the 'restricted' profile, which
+prohibits privileged containers, host PID/IPC/network namespace sharing,
+and requires all containers to run as non-root users.
+
+8.2 CI/CD Pipeline
+
+The CI/CD pipeline is implemented with GitHub Actions for source code CI
+and ArgoCD for GitOps-based deployment to Kubernetes. The pipeline has
+the following stages: Lint and Test (runs golangci-lint, unit tests with
+coverage, and TypeScript type checking on every push to any branch),
+Security Scan (runs Trivy container image scan and Go dependency
+vulnerability scan on every push to main), Build and Push (builds Docker
+multi-arch images for amd64 and arm64, pushes to a private container
+registry), and Deploy (ArgoCD watches the GitOps repository, detects
+changes to Kubernetes manifests, and applies them to the cluster with a
+sync hook that runs pre-deployment smoke tests). All deployments use
+rolling updates with maxUnavailable=0 and maxSurge=1, ensuring zero
+downtime. Database migrations run as pre-deploy hooks using a dedicated
+migration Job that applies Flyway migrations before the new application
+pods start.
+
+8.3 Backup and Disaster Recovery
+
+PostgreSQL databases are backed up every 6 hours using pg_dump with
+custom format, compressed with zstd, and uploaded to a separate MinIO
+bucket in a different availability zone. Backups are retained for 30
+days. A weekly full backup and daily incremental backup strategy is used
+for large databases. MinIO object storage (model artifacts) uses
+versioning and replication to a cross-AZ bucket. Redis uses AOF
+persistence with hourly RDB snapshots. The entire infrastructure is
+defined as Terraform code, enabling rapid reconstruction in a new
+environment. The Recovery Point Objective (RPO) is 6 hours for databases
+and near-zero for object storage (cross-AZ replication). The Recovery
+Time Objective (RTO) is 1 hour for full infrastructure reconstruction
+from Terraform + backup restoration.
+
+9. Pricing
+
+ModelVault pricing is structured into three tiers: Free, Pro, and
+Enterprise. All tiers require contact with the sales team for plan
+activation, custom pricing, volume discounts, and contract negotiation.
+The Free tier provides limited access for individual developers and
+small teams to evaluate the platform. The Pro tier is designed for
+growing AI teams that need unlimited scanning and team collaboration.
+The Enterprise tier includes all Pro features plus dedicated
+infrastructure, custom integrations, SLA guarantees, and premium
+support.
+
+  -----------------------------------------------------------------------
+  Feature           Free              Pro               Enterprise
+  ----------------- ----------------- ----------------- -----------------
+  Model storage     10 GB             500 GB            Custom
+
+  Monthly model     10                Unlimited         Unlimited
+  scans                                                 
+
+  Sandbox jobs per  5                 Unlimited         Unlimited
+  month                                                 
+
+  Team members      Up to 3           Up to 25          Unlimited
+
+  Registries        1                 5                 Unlimited
+
+  CI/CD             1 pipeline        Unlimited         Unlimited
+  integrations                                          
+
+  API keys          2                 Unlimited         Unlimited
+
+  Audit log         30 days           1 year            2+ years
+  retention                                             
+
+  SSO / SAML        No                Yes               Yes
+
+  Custom roles and  No                Yes               Yes
+  policies                                              
+
+  On-premises / VPC No                No                Yes
+  deployment                                            
+
+  SLA               None              99.5% uptime      99.9% uptime
+
+  Support           Community         Email (24h        Dedicated + Slack
+                                      response)         (1h response)
+
+  Pricing           Contact Sales     Contact Sales     Contact Sales
+  -----------------------------------------------------------------------
+
+For pricing inquiries, feature requests, or custom enterprise
+agreements, please contact the ModelVault sales team at
+sales@modelvault.dev. All plans include a 14-day free trial of Pro
+features. No credit card is required to start. Volume discounts are
+available for organizations managing more than 1,000 models or requiring
+more than 5TB of storage.

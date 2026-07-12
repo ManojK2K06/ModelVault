@@ -1,0 +1,1142 @@
+     1→import path from "path";
+     2→import { promises as fs } from "fs";
+     3→
+     4→// ───────────────────────────────────────────────
+     5→// Types
+     6→// ───────────────────────────────────────────────
+     7→
+     8→export type DetectedFormat = "safetensors" | "gguf" | "onnx" | "zip" | "pytorch" | "unknown";
+     9→
+    10→export interface ParsedMetadata {
+    11→  /** Key-value pairs extracted from the file header */
+    12→  entries: Record<string, string>;
+    13→  /** Tensor names found (safetensors, gguf) */
+    14→  tensorNames: string[];
+    15→  /** Tensor shapes as string descriptors (e.g. "[768, 3072]") */
+    16→  tensorShapes: string[];
+    17→  /** Data types found (e.g. "F32", "BF16") */
+    18→  dataTypes: string[];
+    19→  /** Dependencies/frameworks identified (e.g. "pytorch", "transformers") */
+    20→  dependencies: string[];
+    21→  /** The format actually detected from magic bytes (may differ from claimed format) */
+    22→  detectedFormat: DetectedFormat;
+    23→  /** The format the user/model record claims */
+    24→  claimedFormat: string;
+    25→  /** Whether the claimed format matches the detected format */
+    26→  formatMatches: boolean;
+    27→  /** Total file size in bytes */
+    28→  fileSizeBytes: number;
+    29→  /** Header size in bytes (the portion we parsed) */
+    30→  headerSizeBytes: number;
+    31→}
+    32→
+    33→export interface Vulnerability {
+    34→  id: string;
+    35→  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+    36→  description: string;
+    37→  detail?: string;
+    38→}
+    39→
+    40→export interface SbomResult {
+    41→  sbomJson: string;
+    42→  vulnerabilities: Vulnerability[];
+    43→  criticalCount: number;
+    44→  highCount: number;
+    45→  mediumCount: number;
+    46→  lowCount: number;
+    47→  totalDeps: number;
+    48→}
+    49→
+    50→// ───────────────────────────────────────────────
+    51→// Magic byte constants
+    52→// ───────────────────────────────────────────────
+    53→
+    54→const MAGIC_ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04]); // PK\x03\x04
+    55→const MAGIC_GGUF = Buffer.from("GGUF", "ascii");
+    56→const MAGIC_GGJT = Buffer.from("GGJT", "ascii");
+    57→
+    58→// ───────────────────────────────────────────────
+    59→// Binary reading helpers
+    60→// ───────────────────────────────────────────────
+    61→
+    62→function readUint32LE(buf: Buffer, offset: number): number {
+    63→  return buf.readUInt32LE(offset);
+    64→}
+    65→
+    66→function readUint64LE(buf: Buffer, offset: number): bigint {
+    67→  // Read as two 32-bit parts and combine — avoids BigInt constructor
+    68→  const lo = BigInt(buf.readUInt32LE(offset));
+    69→  const hi = BigInt(buf.readUInt32LE(offset + 4));
+    70→  return (hi << 32n) | lo;
+    71→}
+    72→
+    73→function readString(buf: Buffer, offset: number, length: number): string {
+    74→  return buf.toString("utf-8", offset, offset + length);
+    75→}
+    76→
+    77→function readUint16LE(buf: Buffer, offset: number): number {
+    78→  return buf.readUInt16LE(offset);
+    79→}
+    80→
+    81→// ───────────────────────────────────────────────
+    82→// Format detection
+    83→// ───────────────────────────────────────────────
+    84→
+    85→export function detectFormat(buf: Buffer): DetectedFormat {
+    86→  if (buf.length < 4) return "unknown";
+    87→
+    88→  // Check GGUF / GGJT
+    89→  if (buf.length >= 4) {
+    90→    const four = buf.subarray(0, 4);
+    91→    if (four.equals(MAGIC_GGUF) || four.equals(MAGIC_GGJT)) return "gguf";
+    92→  }
+    93→
+    94→  // Check ZIP (PyTorch, SafeTensors bundles, etc.)
+    95→  if (buf.length >= 4 && buf.subarray(0, 4).equals(MAGIC_ZIP)) return "zip";
+    96→
+    97→  // Check SafeTensors: 8-byte header size followed by JSON starting with '{'
+    98→  if (buf.length >= 12) {
+    99→    try {
+   100→      const headerSize = Number(readUint64LE(buf, 0));
+   101→      if (headerSize > 0 && headerSize < buf.length - 8) {
+   102→        const firstByte = buf[8];
+   103→        if (firstByte === 0x7b) {
+   104→          // '{' — likely JSON header
+   105→          const headerStr = buf.toString("utf-8", 8, 8 + Math.min(headerSize, 1024));
+   106→          if (headerStr.startsWith("{")) {
+   107→            return "safetensors";
+   108→          }
+   109→        }
+   110→      }
+   111→    } catch {
+   112→      // Not safetensors
+   113→    }
+   114→  }
+   115→
+   116→  // ONNX is protobuf — no fixed magic. Heuristic: check if the first byte
+   117→  // looks like a protobuf field tag (varint), and scan for "onnx" string in
+   118→  // the first 10KB.
+   119→  if (buf.length >= 10) {
+   120→    const firstByte = buf[0];
+   121→    // Protobuf field tags are varints; low values (0-15) are common for field numbers 1-15
+   122→    // with wire types 0-1. Check if first bytes look like valid protobuf.
+   123→    if (firstByte < 0x80) {
+   124→      const scanLimit = Math.min(buf.length, 10240);
+   125→      const scanSlice = buf.subarray(0, scanLimit).toString("utf-8");
+   126→      if (scanSlice.includes("onnx") || scanSlice.includes("ONNX") || scanSlice.includes("ai.onnx")) {
+   127→        return "onnx";
+   128→      }
+   129→    }
+   130→  }
+   131→
+   132→  return "unknown";
+   133→}
+   134→
+   135→// ───────────────────────────────────────────────
+   136→// SafeTensors parser
+   137→// ───────────────────────────────────────────────
+   138→
+   139→function parseSafeTensors(buf: Buffer): Partial<ParsedMetadata> {
+   140→  const entries: Record<string, string> = {};
+   141→  const tensorNames: string[] = [];
+   142→  const tensorShapes: string[] = [];
+   143→  const dataTypes: string[] = [];
+   144→  const dependencies: string[] = [];
+   145→
+   146→  if (buf.length < 8) return {};
+   147→
+   148→  try {
+   149→    const headerSize = Number(readUint64LE(buf, 0));
+   150→    if (headerSize <= 0 || headerSize > buf.length - 8) return {};
+   151→
+   152→    const headerStr = buf.toString("utf-8", 8, 8 + headerSize);
+   153→    const header = JSON.parse(headerStr) as Record<string, unknown>;
+   154→
+   155→    // Extract metadata fields
+   156→    if (header.metadata && typeof header.metadata === "object") {
+   157→      const meta = header.metadata as Record<string, unknown>;
+   158→      for (const [key, value] of Object.entries(meta)) {
+   159→        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+   160→          entries[`metadata.${key}`] = String(value);
+   161→        }
+   162→      }
+   163→    }
+   164→
+   165→    // Extract weight map entries (tensor info)
+   166→    if (typeof header.__metadata__ === "object" && header.__metadata__) {
+   167→      const m = header.__metadata__ as Record<string, unknown>;
+   168→      for (const [key, value] of Object.entries(m)) {
+   169→        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+   170→          entries[`__metadata__.${key}`] = String(value);
+   171→        }
+   172→      }
+   173→    }
+   174→
+   175→    // Extract tensor data
+   176→    for (const [name, info] of Object.entries(header)) {
+   177→      if (name === "metadata" || name === "__metadata__") continue;
+   178→      if (typeof info === "object" && info !== null) {
+   179→        const tensorInfo = info as {
+   180→          dtype?: string;
+   181→          shape?: number[];
+   182→          data_offsets?: number[];
+   183→        };
+   184→        tensorNames.push(name);
+   185→        if (tensorInfo.shape) {
+   186→          tensorShapes.push(`[${tensorInfo.shape.join(", ")}]`);
+   187→        }
+   188→        if (tensorInfo.dtype) {
+   189→          const dt = tensorInfo.dtype.toUpperCase();
+   190→          dataTypes.push(dt);
+   191→        }
+   192→      }
+   193→    }
+   194→
+   195→    // Identify dependencies from metadata
+   196→    if (entries["metadata.framework"] || entries["metadata.library"]) {
+   197→      const fw = entries["metadata.framework"] || entries["metadata.library"];
+   198→      dependencies.push(fw.toLowerCase());
+   199→    }
+   200→    if (entries["metadata.transformers_version"]) {
+   201→      dependencies.push(`transformers==${entries["metadata.transformers_version"]}`);
+   202→    }
+   203→    if (entries["metadata.pytorch_version"]) {
+   204→      dependencies.push(`torch==${entries["metadata.pytorch_version"]}`);
+   205→    }
+   206→    if (entries["metadata.model_type"]) {
+   207→      entries["model_type"] = entries["metadata.model_type"];
+   208→    }
+   209→    if (entries["metadata.architectures"]) {
+   210→      entries["architectures"] = entries["metadata.architectures"];
+   211→    }
+   212→
+   213→    return {
+   214→      entries,
+   215→      tensorNames,
+   216→      tensorShapes,
+   217→      dataTypes,
+   218→      dependencies,
+   219→      headerSizeBytes: 8 + headerSize,
+   220→    };
+   221→  } catch {
+   222→    return {
+   223→      headerSizeBytes: 0,
+   224→      entries: { "parse_error": "Failed to parse SafeTensors JSON header" },
+   225→    };
+   226→  }
+   227→}
+   228→
+   229→// ───────────────────────────────────────────────
+   230→// GGUF parser
+   231→// ───────────────────────────────────────────────
+   232→
+   233→const GGUF_VALUE_TYPE_NAMES: Record<number, string> = {
+   234→  0: "UINT8",
+   235→  1: "INT8",
+   236→  2: "UINT16",
+   237→  3: "INT16",
+   238→  4: "UINT32",
+   239→  5: "INT32",
+   240→  6: "FLOAT32",
+   241→  7: "BOOL",
+   242→  8: "STRING",
+   243→  9: "ARRAY",
+   244→  10: "UINT64",
+   245→  11: "INT64",
+   246→  12: "FLOAT64",
+   247→};
+   248→
+   249→function parseGGUF(buf: Buffer): Partial<ParsedMetadata> {
+   250→  const entries: Record<string, string> = {};
+   251→  const dependencies: string[] = [];
+   252→  const dataTypes: string[] = [];
+   253→
+   254→  if (buf.length < 24) return {};
+   255→
+   256→  try {
+   257→    // Magic (4) + version (4) + tensor_count (8) + metadata_kv_count (8) = 24 bytes
+   258→    const magic = buf.subarray(0, 4).toString("ascii");
+   259→    const version = readUint32LE(buf, 4);
+   260→    const tensorCount = readUint64LE(buf, 8);
+   261→    const metadataKVCount = readUint64LE(buf, 16);
+   262→
+   263→    entries["gguf.magic"] = magic;
+   264→    entries["gguf.version"] = String(version);
+   265→    entries["gguf.tensor_count"] = String(tensorCount);
+   266→    entries["gguf.metadata_kv_count"] = String(metadataKVCount);
+   267→
+   268→    // Parse metadata key-value pairs
+   269→    let offset = 24;
+   270→
+   271→    // Limit metadata parsing to prevent OOM on huge files
+   272→    const maxMetadataEntries = 500;
+   273→    const kvCount = Number(metadataKVCount);
+   274→    const parseCount = Math.min(kvCount, maxMetadataEntries);
+   275→
+   276→    for (let i = 0; i < parseCount; i++) {
+   277→      if (offset >= buf.length - 4) break;
+   278→
+   279→      // Read key (uint32 length + bytes)
+   280→      const keyLen = readUint32LE(buf, offset);
+   281→      offset += 4;
+   282→
+   283→      if (offset + keyLen > buf.length) break;
+   284→      const key = readString(buf, offset, keyLen);
+   285→      offset += keyLen;
+   286→
+   287→      // Read value type
+   288→      if (offset + 4 > buf.length) break;
+   289→      const valueType = readUint32LE(buf, offset);
+   290→      offset += 4;
+   291→
+   292→      // Parse value based on type
+   293→      const value = readGGUFValue(buf, offset, valueType);
+   294→      if (value === null) break; // out of bounds
+   295→
+   296→      offset = value.newOffset;
+   297→
+   298→      if (typeof value.val === "string") {
+   299→        entries[key] = value.val;
+   300→      } else if (typeof value.val === "number" || typeof value.val === "bigint" || typeof value.val === "boolean") {
+   301→        entries[key] = String(value.val);
+   302→      }
+   303→
+   304→      // Track data types from tensor data
+   305→      if (key.endsWith(".dtype") && typeof value.val === "string") {
+   306→        dataTypes.push(value.val);
+   307→      }
+   308→    }
+   309→
+   310→    // Identify dependencies from GGUF metadata
+   311→    if (entries["general.architecture"]) {
+   312→      entries["model_architecture"] = entries["general.architecture"];
+   313→    }
+   314→    if (entries["general.name"]) {
+   315→      entries["model_name"] = entries["general.name"];
+   316→    }
+   317→    if (entries["general.file_type"]) {
+   318→      entries["file_type"] = entries["general.file_type"];
+   319→    }
+   320→    if (entries["general.quantization_version"]) {
+   321→      entries["quantization_version"] = entries["general.quantization_version"];
+   322→      dependencies.push("llama.cpp");
+   323→    }
+   324→    if (entries["tokenizer.ggml.model"]) {
+   325→      dependencies.push(`tokenizer:${entries["tokenizer.ggml.model"]}`);
+   326→    }
+   327→
+   328→    return {
+   329→      entries,
+   330→      tensorNames: [],
+   331→      tensorShapes: [],
+   332→      dataTypes,
+   333→      dependencies,
+   334→      headerSizeBytes: offset,
+   335→    };
+   336→  } catch {
+   337→    return {
+   338→      headerSizeBytes: 0,
+   339→      entries: { "parse_error": "Failed to parse GGUF metadata" },
+   340→    };
+   341→  }
+   342→}
+   343→
+   344→function readGGUFValue(
+   345→  buf: Buffer,
+   346→  offset: number,
+   347→  valueType: number
+   348→): { val: string | number | bigint | boolean | null; newOffset: number } {
+   349→  try {
+   350→    switch (valueType) {
+   351→      case 0: // UINT8
+   352→        return { val: buf[offset], newOffset: offset + 1 };
+   353→      case 1: // INT8
+   354→        return { val: buf.readInt8(offset), newOffset: offset + 1 };
+   355→      case 2: // UINT16
+   356→        return { val: readUint16LE(buf, offset), newOffset: offset + 2 };
+   357→      case 3: // INT16
+   358→        return { val: buf.readInt16LE(offset), newOffset: offset + 2 };
+   359→      case 4: // UINT32
+   360→        return { val: readUint32LE(buf, offset), newOffset: offset + 4 };
+   361→      case 5: // INT32
+   362→        return { val: buf.readInt32LE(offset), newOffset: offset + 4 };
+   363→      case 6: // FLOAT32
+   364→        return { val: buf.readFloatLE(offset), newOffset: offset + 4 };
+   365→      case 7: // BOOL
+   366→        return { val: buf[offset] !== 0, newOffset: offset + 1 };
+   367→      case 8: { // STRING
+   368→        const strLen = readUint32LE(buf, offset);
+   369→        const strOffset = offset + 4;
+   370→        if (strOffset + strLen > buf.length) return { val: null, newOffset: buf.length };
+   371→        // Limit string length to prevent OOM
+   372→        const safeLen = Math.min(strLen, 65536);
+   373→        const str = readString(buf, strOffset, safeLen);
+   374→        return { val: str, newOffset: strOffset + strLen };
+   375→      }
+   376→      case 9: { // ARRAY
+   377→        const elemType = readUint32LE(buf, offset);
+   378→        const arrLen = Number(readUint64LE(buf, offset + 4));
+   379→        let arrOffset = offset + 12;
+   380→        // Skip array data — don't read it all into memory
+   381→        const elemSize = getGGUFTypeSize(elemType);
+   382→        if (elemSize > 0) {
+   383→          arrOffset += elemSize * Math.min(arrLen, 10000);
+   384→        } else {
+   385→          // Variable-size elements (strings), skip them
+   386→          for (let i = 0; i < Math.min(arrLen, 100); i++) {
+   387→            if (arrOffset >= buf.length) break;
+   388→            const result = readGGUFValue(buf, arrOffset, elemType);
+   389→            arrOffset = result.newOffset;
+   390→          }
+   391→        }
+   392→        return { val: `[array of ${arrLen} ${GGUF_VALUE_TYPE_NAMES[elemType] ?? "UNKNOWN"}]`, newOffset: arrOffset };
+   393→      }
+   394→      case 10: // UINT64
+   395→        return { val: readUint64LE(buf, offset), newOffset: offset + 8 };
+   396→      case 11: // INT64
+   397→        return { val: buf.readBigInt64LE(offset), newOffset: offset + 8 };
+   398→      case 12: // FLOAT64
+   399→        return { val: buf.readDoubleLE(offset), newOffset: offset + 8 };
+   400→      default:
+   401→        return { val: `[unknown type ${valueType}]`, newOffset: offset };
+   402→    }
+   403→  } catch {
+   404→    return { val: null, newOffset: offset + 1 };
+   405→  }
+   406→}
+   407→
+   408→function getGGUFTypeSize(valueType: number): number {
+   409→  switch (valueType) {
+   410→    case 0: return 1; // UINT8
+   411→    case 1: return 1; // INT8
+   412→    case 2: return 2; // UINT16
+   413→    case 3: return 2; // INT16
+   414→    case 4: return 4; // UINT32
+   415→    case 5: return 4; // INT32
+   416→    case 6: return 4; // FLOAT32
+   417→    case 7: return 1; // BOOL
+   418→    case 8: return -1; // STRING — variable
+   419→    case 9: return -1; // ARRAY — variable
+   420→    case 10: return 8; // UINT64
+   421→    case 11: return 8; // INT64
+   422→    case 12: return 8; // FLOAT64
+   423→    default: return -1;
+   424→  }
+   425→}
+   426→
+   427→// ───────────────────────────────────────────────
+   428→// ONNX parser (simplified)
+   429→// ───────────────────────────────────────────────
+   430→
+   431→function parseONNX(buf: Buffer): Partial<ParsedMetadata> {
+   432→  const entries: Record<string, string> = {};
+   433→  const dependencies: string[] = [];
+   434→
+   435→  // Read first 10KB and extract human-readable strings and known patterns
+   436→  const scanLimit = Math.min(buf.length, 10240);
+   437→  const scanBytes = buf.subarray(0, scanLimit);
+   438→
+   439→  // Extract printable ASCII strings (min length 4)
+   440→  const strings: string[] = [];
+   441→  let current = "";
+   442→  for (let i = 0; i < scanBytes.length; i++) {
+   443→    const byte = scanBytes[i];
+   444→    if (byte >= 32 && byte <= 126) {
+   445→      current += String.fromCharCode(byte);
+   446→    } else {
+   447→      if (current.length >= 4) {
+   448→        strings.push(current);
+   449→      }
+   450→      current = "";
+   451→    }
+   452→  }
+   453→  if (current.length >= 4) strings.push(current);
+   454→
+   455→  // Extract known ONNX metadata strings
+   456→  for (const s of strings) {
+   457→    if (s.startsWith("onnx:") || s.startsWith("ai.onnx") || s === "onnx") {
+   458→      entries["onnx_domain"] = s;
+   459→    }
+   460→    if (/^\d+\.\d+\.\d+$/.test(s) && !entries["onnx_ir_version"]) {
+   461→      entries["onnx_ir_version"] = s;
+   462→    }
+   463→  }
+   464→
+   465→  // Try to find producer name (common in ONNX exports)
+   466→  for (const s of strings) {
+   467→    if (
+   468→      (s.includes("onnxruntime") || s.includes("pytorch") || s.includes("tensorflow")) &&
+   469→      !entries["producer"]
+   470→    ) {
+   471→      entries["producer"] = s;
+   472→      if (s.includes("pytorch")) dependencies.push("pytorch");
+   473→      if (s.includes("tensorflow")) dependencies.push("tensorflow");
+   474→      if (s.includes("onnxruntime")) dependencies.push("onnxruntime");
+   475→    }
+   476→  }
+   477→
+   478→  // Minimal protobuf field decoding for ONNX ModelProto
+   479→  // Field 1 (varint) = ir_version, Field 2 (message) = opset_import,
+   480→  // Field 4 (string) = producer_name, Field 5 (string) = domain,
+   481→  // Field 6 (string) = doc_string, Field 7 (varint) = model_version,
+   482→  // Field 8 (message) = graph
+   483→  try {
+   484→    let pbOffset = 0;
+   485→    while (pbOffset < scanBytes.length - 1) {
+   486→      // Decode varint tag
+   487→      let tag = 0;
+   488→      let shift = 0;
+   489→      while (pbOffset < scanBytes.length) {
+   490→        const b = scanBytes[pbOffset];
+   491→        pbOffset++;
+   492→        tag |= (b & 0x7f) << shift;
+   493→        shift += 7;
+   494→        if ((b & 0x80) === 0) break;
+   495→      }
+   496→      const fieldNumber = tag >>> 3;
+   497→      const wireType = tag & 0x07;
+   498→
+   499→      // Only care about small field numbers (< 20) to avoid false positives
+   500→      if (fieldNumber === 0 || fieldNumber > 20) {
+   501→        // Try to skip forward — unknown structure, bail out of pb parsing
+   502→        break;
+   503→      }
+   504→
+   505→      if (wireType === 0) {
+   506→        // Varint
+   507→        let value = 0n;
+   508→        let vShift = 0n;
+   509→        while (pbOffset < scanBytes.length) {
+   510→          const b = scanBytes[pbOffset];
+   511→          pbOffset++;
+   512→          value |= BigInt(b & 0x7f) << vShift;
+   513→          if ((b & 0x80) === 0) break;
+   514→          vShift += 7n;
+   515→        }
+   516→        if (fieldNumber === 1 && !entries["ir_version"]) {
+   517→          entries["ir_version"] = String(value);
+   518→        }
+   519→        if (fieldNumber === 7 && !entries["model_version"]) {
+   520→          entries["model_version"] = String(value);
+   521→        }
+   522→      } else if (wireType === 2) {
+   523→        // Length-delimited (string, bytes, or embedded message)
+   524→        let length = 0;
+   525→        let lShift = 0;
+   526→        while (pbOffset < scanBytes.length) {
+   527→          const b = scanBytes[pbOffset];
+   528→          pbOffset++;
+   529→          length |= (b & 0x7f) << lShift;
+   530→          if ((b & 0x80) === 0) break;
+   531→          lShift += 7;
+   532→        }
+   533→
+   534→        // Sanity-check length
+   535→        if (length < 0 || length > 1048576) break;
+   536→        if (pbOffset + length > scanBytes.length) break;
+   537→
+   538→        // For small lengths, try to extract as string
+   539→        if (length > 0 && length <= 4096) {
+   540→          const str = scanBytes.toString("utf-8", pbOffset, pbOffset + length);
+   541→          // Check if it looks like a printable string (at least 80% printable)
+   542→          let printable = 0;
+   543→          for (let i = 0; i < Math.min(str.length, 200); i++) {
+   544→            const c = str.charCodeAt(i);
+   545→            if (c >= 32 && c <= 126) printable++;
+   546→          }
+   547→          const printRatio = str.length > 0 ? printable / Math.min(str.length, 200) : 0;
+   548→
+   549→          if (printRatio > 0.8 && str.length < 200) {
+   550→            if (fieldNumber === 4 && !entries["producer_name"]) {
+   551→              entries["producer_name"] = str.trim();
+   552→              if (str.toLowerCase().includes("pytorch")) dependencies.push("pytorch");
+   553→              if (str.toLowerCase().includes("tensorflow")) dependencies.push("tensorflow");
+   554→              if (str.toLowerCase().includes("onnxruntime")) dependencies.push("onnxruntime");
+   555→              if (str.toLowerCase().includes("sklearn")) dependencies.push("scikit-learn");
+   556→            }
+   557→            if (fieldNumber === 5 && !entries["domain"]) {
+   558→              entries["domain"] = str.trim();
+   559→            }
+   560→            if (fieldNumber === 6 && !entries["doc_string"]) {
+   561→              entries["doc_string"] = str.trim();
+   562→            }
+   563→          }
+   564→        }
+   565→
+   566→        // For field 8 (graph), field 2 (opset_import) — these are sub-messages we skip
+   567→        if (fieldNumber === 8 && !entries["graph_info"]) {
+   568→          entries["graph_info"] = `[sub-message, ${length} bytes]`;
+   569→        }
+   570→        if (fieldNumber === 2 && !entries["opset_import_info"]) {
+   571→          entries["opset_import_info"] = `[sub-message, ${length} bytes]`;
+   572→        }
+   573→
+   574→        pbOffset += length;
+   575→      } else if (wireType === 1) {
+   576→        // 64-bit fixed
+   577→        pbOffset += 8;
+   578→      } else if (wireType === 5) {
+   579→        // 32-bit fixed
+   580→        pbOffset += 4;
+   581→      } else {
+   582→        // Unknown wire type — stop parsing
+   583→        break;
+   584→      }
+   585→    }
+   586→  } catch {
+   587→    // Protobuf parsing failed, continue with string-based results
+   588→  }
+   589→
+   590→  if (Object.keys(entries).length === 0) {
+   591→    entries["parse_note"] = "ONNX protobuf structure detected but no metadata extracted";
+   592→  }
+   593→
+   594→  return {
+   595→    entries,
+   596→    tensorNames: [],
+   597→    tensorShapes: [],
+   598→    dataTypes: [],
+   599→    dependencies,
+   600→    headerSizeBytes: scanLimit,
+   601→  };
+   602→}
+   603→
+   604→// ───────────────────────────────────────────────
+   605→// ZIP / PyTorch parser
+   606→// ───────────────────────────────────────────────
+   607→
+   608→interface ZipEntry {
+   609→  filename: string;
+   610→  compressionMethod: number;
+   611→  compressedSize: number;
+   612→  dataOffset: number;
+   613→}
+   614→
+   615→function parseZipEntries(buf: Buffer): ZipEntry[] {
+   616→  const entries: ZipEntry[] = [];
+   617→
+   618→  let offset = 0;
+   619→  // Scan for local file headers: PK\x03\x04
+   620→  while (offset < buf.length - 30) {
+   621→    if (buf[offset] === 0x50 && buf[offset + 1] === 0x4b && buf[offset + 2] === 0x03 && buf[offset + 3] === 0x04) {
+   622→      const compressionMethod = readUint16LE(buf, offset + 8);
+   623→      const compressedSize = readUint32LE(buf, offset + 18);
+   624→      const filenameLen = readUint16LE(buf, offset + 26);
+   625→      const extraLen = readUint16LE(buf, offset + 28);
+   626→
+   627→      if (offset + 30 + filenameLen <= buf.length) {
+   628→        const filename = readString(buf, offset + 30, filenameLen);
+   629→        entries.push({
+   630→          filename,
+   631→          compressionMethod,
+   632→          compressedSize,
+   633→          dataOffset: offset + 30 + filenameLen + extraLen,
+   634→        });
+   635→      }
+   636→
+   637→      // Move to next entry
+   638→      const advance = 30 + filenameLen + extraLen + compressedSize;
+   639→      if (advance <= 0) break;
+   640→      offset += advance;
+   641→    } else {
+   642→      offset++;
+   643→    }
+   644→  }
+   645→
+   646→  return entries;
+   647→}
+   648→
+   649→function extractStoredEntry(buf: Buffer, entry: ZipEntry): Buffer | null {
+   650→  if (entry.compressionMethod !== 0) return null; // Not stored
+   651→  if (entry.dataOffset + entry.compressedSize > buf.length) return null;
+   652→  return buf.subarray(entry.dataOffset, entry.dataOffset + entry.compressedSize);
+   653→}
+   654→
+   655→function parsePyTorchZip(buf: Buffer): Partial<ParsedMetadata> {
+   656→  const entries: Record<string, string> = {};
+   657→  const dependencies: string[] = [];
+   658→  const tensorNames: string[] = [];
+   659→
+   660→  try {
+   661→    const zipEntries = parseZipEntries(buf);
+   662→    const filenames = zipEntries.map((e) => e.filename);
+   663→
+   664→    entries["zip.entry_count"] = String(zipEntries.length);
+   665→    entries["zip.entries"] = filenames.join(", ");
+   666→
+   667→    // Check for known PyTorch/HuggingFace files
+   668→    const hasConfig = filenames.includes("config.json");
+   669→    const hasSafeTensors = filenames.some((f) => f.endsWith(".safetensors"));
+   670→    const hasPytorchBin = filenames.some((f) => f.endsWith("pytorch_model.bin") || f === "pytorch_model.bin");
+   671→    const hasTokenizerConfig = filenames.includes("tokenizer_config.json");
+   672→    const hasModelCard = filenames.includes("README.md") || filenames.includes("model_card.md");
+   673→
+   674→    entries["has_config.json"] = String(hasConfig);
+   675→    entries["has_safetensors"] = String(hasSafeTensors);
+   676→    entries["has_pytorch_model.bin"] = String(hasPytorchBin);
+   677→    entries["has_tokenizer_config.json"] = String(hasTokenizerConfig);
+   678→    entries["has_model_card"] = String(hasModelCard);
+   679→
+   680→    // Parse config.json if present and stored (uncompressed)
+   681→    if (hasConfig) {
+   682→      const configEntry = zipEntries.find((e) => e.filename === "config.json");
+   683→      if (configEntry) {
+   684→        const configData = extractStoredEntry(buf, configEntry);
+   685→        if (configData) {
+   686→          try {
+   687→            const config = JSON.parse(configData.toString("utf-8")) as Record<string, unknown>;
+   688→            if (config.model_type) entries["model_type"] = String(config.model_type);
+   689→            if (config.architectures) {
+   690→              entries["architectures"] = JSON.stringify(config.architectures);
+   691→            }
+   692→            if (config.transformers_version) {
+   693→              entries["transformers_version"] = String(config.transformers_version);
+   694→              dependencies.push(`transformers==${config.transformers_version}`);
+   695→            }
+   696→            if (config.torch_dtype) {
+   697→              entries["torch_dtype"] = String(config.torch_dtype);
+   698→              dependencies.push(`torch (dtype: ${config.torch_dtype})`);
+   699→            }
+   700→            if (config._name_or_path) {
+   701→              entries["_name_or_path"] = String(config._name_or_path);
+   702→            }
+   703→            // Extract other useful config fields
+   704→            const configKeys = ["hidden_size", "num_hidden_layers", "num_attention_heads", "vocab_size", "max_position_embeddings"];
+   705→            for (const key of configKeys) {
+   706→              if (config[key] !== undefined) {
+   707→                entries[`config.${key}`] = String(config[key]);
+   708→              }
+   709→            }
+   710→          } catch {
+   711→            entries["config.json_parse_error"] = "Failed to parse config.json";
+   712→          }
+   713→        } else {
+   714→          entries["config.json_note"] = "config.json is compressed; cannot read without decompression";
+   715→        }
+   716→      }
+   717→    }
+   718→
+   719→    // Parse tokenizer_config.json if present
+   720→    if (hasTokenizerConfig) {
+   721→      const tokEntry = zipEntries.find((e) => e.filename === "tokenizer_config.json");
+   722→      if (tokEntry) {
+   723→        const tokData = extractStoredEntry(buf, tokEntry);
+   724→        if (tokData) {
+   725→          try {
+   726→            const tokConfig = JSON.parse(tokData.toString("utf-8")) as Record<string, unknown>;
+   727→            if (tokConfig.tokenizer_class) {
+   728→              entries["tokenizer_class"] = String(tokConfig.tokenizer_class);
+   729→              dependencies.push(`tokenizer:${tokConfig.tokenizer_class}`);
+   730→            }
+   731→          } catch {
+   732→            // Ignore tokenizer parse errors
+   733→          }
+   734→        }
+   735→      }
+   736→    }
+   737→
+   738→    // Collect tensor file names
+   739→    for (const entry of zipEntries) {
+   740→      if (entry.filename.endsWith(".safetensors") || entry.filename.endsWith(".bin") || entry.filename.endsWith(".pt") || entry.filename.endsWith(".pth")) {
+   741→        tensorNames.push(entry.filename);
+   742→      }
+   743→    }
+   744→
+   745→    // Determine if this is a HuggingFace format model
+   746→    if (hasConfig && (hasSafeTensors || hasPytorchBin)) {
+   747→      entries["bundle_format"] = "huggingface";
+   748→      dependencies.push("huggingface_hub");
+   749→    } else if (hasPytorchBin) {
+   750→      entries["bundle_format"] = "pytorch_checkpoint";
+   751→    }
+   752→
+   753→    return {
+   754→      entries,
+   755→      tensorNames,
+   756→      tensorShapes: [],
+   757→      dataTypes: [],
+   758→      dependencies,
+   759→      headerSizeBytes: Math.min(buf.length, 65536), // We scan a portion for ZIP entries
+   760→    };
+   761→  } catch {
+   762→    return {
+   763→      headerSizeBytes: 0,
+   764→      entries: { "parse_error": "Failed to parse ZIP/PyTorch archive" },
+   765→    };
+   766→  }
+   767→}
+   768→
+   769→// ───────────────────────────────────────────────
+   770→// Generic / unknown format parser
+   771→// ───────────────────────────────────────────────
+   772→
+   773→function parseGeneric(buf: Buffer): Partial<ParsedMetadata> {
+   774→  const result: Record<string, string> = {};
+   775→
+   776→  result["file_size_bytes"] = String(buf.length);
+   777→  result["first_16_bytes_hex"] = buf.subarray(0, Math.min(16, buf.length)).toString("hex");
+   778→  result["first_16_bytes_ascii"] = buf
+   779→    .subarray(0, Math.min(16, buf.length))
+   780→    .toString("ascii")
+   781→    .replace(/[^\x20-\x7e]/g, ".");
+   782→
+   783→  // Try to extract any JSON in the first 10KB
+   784→  const scanLimit = Math.min(buf.length, 10240);
+   785→  const scanStr = buf.subarray(0, scanLimit).toString("utf-8");
+   786→  const jsonMatch = scanStr.match(/\{[\s\S]{10,5000}?\}/);
+   787→  if (jsonMatch) {
+   788→    try {
+   789→      const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+   790→      for (const [key, value] of Object.entries(parsed).slice(0, 20)) {
+   791→        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+   792→          result[`json.${key}`] = String(value);
+   793→        }
+   794→      }
+   795→    } catch {
+   796→      // Not valid JSON
+   797→    }
+   798→  }
+   799→
+   800→  // Extract magic bytes description
+   801→  if (buf.length >= 4) {
+   802→    const magic = buf.subarray(0, 4);
+   803→    if (magic[0] === 0x89 && magic[1] === 0x48 && magic[2] === 0x44 && magic[3] === 0x46) {
+   804→      result["detected_type"] = "HDF5 (possibly Keras/TensorFlow)";
+   805→    } else if (magic[0] === 0x80 && magic[1] === 0x2b && magic[2] === 0x0a && magic[3] === 0x00) {
+   806→      result["detected_type"] = "NumPy .npy";
+   807→    } else if (buf.length >= 8) {
+   808→      const ext = buf.subarray(0, 8).toString("ascii");
+   809→      if (ext.startsWith("NUMPY")) {
+   810→        result["detected_type"] = "NumPy .npy archive";
+   811→      }
+   812→    }
+   813→  }
+   814→
+   815→  return {
+   816→    entries: result,
+   817→    tensorNames: [],
+   818→    tensorShapes: [],
+   819→    dataTypes: [],
+   820→    dependencies: [],
+   821→    headerSizeBytes: scanLimit,
+   822→  };
+   823→}
+   824→
+   825→// ───────────────────────────────────────────────
+   826→// Main scan entry point
+   827→// ───────────────────────────────────────────────
+   828→
+   829→export interface ScanInput {
+   830→  /** The file buffer */
+   831→  buffer: Buffer;
+   832→  /** Model name */
+   833→  modelName: string;
+   834→  /** Model version string */
+   835→  modelVersion: string;
+   836→  /** The format the model record claims (from model.format) */
+   837→  claimedFormat: string;
+   838→  /** SHA-256 hash from the version record */
+   839→  sha256Hash: string;
+   840→}
+   841→
+   842→/**
+   843→ * Scan a model file buffer, parse its binary format, and generate a CycloneDX 1.5 ML-BOM.
+   844→ */
+   845→export function scanModelFile(input: ScanInput): SbomResult {
+   846→  const { buffer, modelName, modelVersion, claimedFormat, sha256Hash } = input;
+   847→  const fileSizeBytes = buffer.length;
+   848→  const vulnerabilities: Vulnerability[] = [];
+   849→
+   850→  // ── Check for empty/zero-byte file ──
+   851→  if (fileSizeBytes === 0) {
+   852→    vulnerabilities.push({
+   853→      id: "SCAN-EMPTY-FILE",
+   854→      severity: "CRITICAL",
+   855→      description: "File appears to be empty or corrupted",
+   856→      detail: "The uploaded file has zero bytes. No model data can be extracted.",
+   857→    });
+   858→
+   859→    return buildSbomResult(
+   860→      modelName,
+   861→      modelVersion,
+   862→      sha256Hash,
+   863→      fileSizeBytes,
+   864→      claimedFormat,
+   865→      "unknown",
+   866→      {},
+   867→      [],
+   868→      [],
+   869→      [],
+   870→      [],
+   871→      vulnerabilities
+   872→    );
+   873→  }
+   874→
+   875→  // ── Detect actual format from magic bytes ──
+   876→  const detectedFormat = detectFormat(buffer);
+   877→  const formatMatches = formatMatchesClaimed(claimedFormat, detectedFormat);
+   878→
+   879→  // ── Check format mismatch ──
+   880→  if (!formatMatches) {
+   881→    vulnerabilities.push({
+   882→      id: "SCAN-FORMAT-MISMATCH",
+   883→      severity: "HIGH",
+   884→      description: `Format mismatch: file claims "${claimedFormat}" but magic bytes indicate "${detectedFormat}"`,
+   885→      detail: `The file's binary header does not match the declared format. This could indicate a mislabeled file, a conversion error, or a potentially malicious file.`,
+   886→    });
+   887→  }
+   888→
+   889→  // ── Check suspiciously small file ──
+   890→  if (fileSizeBytes < 1024) {
+   891→    vulnerabilities.push({
+   892→      id: "SCAN-SMALL-FILE",
+   893→      severity: "MEDIUM",
+   894→      description: "File size is suspiciously small for a model artifact",
+   895→      detail: `The file is ${fileSizeBytes} bytes, which is too small to contain meaningful model weights. Typical model files are at least several megabytes.`,
+   896→    });
+   897→  }
+   898→
+   899→  // ── Parse based on detected format ──
+   900→  let parsed: Partial<ParsedMetadata>;
+   901→
+   902→  switch (detectedFormat) {
+   903→    case "safetensors":
+   904→      parsed = parseSafeTensors(buffer);
+   905→      break;
+   906→    case "gguf":
+   907→      parsed = parseGGUF(buffer);
+   908→      break;
+   909→    case "onnx":
+   910→      parsed = parseONNX(buffer);
+   911→      break;
+   912→    case "zip":
+   913→    case "pytorch":
+   914→      parsed = parsePyTorchZip(buffer);
+   915→      break;
+   916→    default:
+   917→      parsed = parseGeneric(buffer);
+   918→      break;
+   919→  }
+   920→
+   921→  const allEntries = parsed.entries ?? {};
+   922→  const tensorNames = parsed.tensorNames ?? [];
+   923→  const tensorShapes = parsed.tensorShapes ?? [];
+   924→  const dataTypes = parsed.dataTypes ?? [];
+   925→  const dependencies = parsed.dependencies ?? [];
+   926→  const headerSizeBytes = parsed.headerSizeBytes ?? 0;
+   927→
+   928→  // ── Check if header is too large ──
+   929→  if (headerSizeBytes > 0 && fileSizeBytes > 0) {
+   930→    const headerRatio = headerSizeBytes / fileSizeBytes;
+   931→    if (headerRatio > 0.9) {
+   932→      vulnerabilities.push({
+   933→        id: "SCAN-LARGE-HEADER",
+   934→        severity: "MEDIUM",
+   935→        description: "Header consumes most of the file; minimal actual model data",
+   936→        detail: `The parsed header is ${Math.round(headerRatio * 100)}% of the file size (${formatBytes(headerSizeBytes)} / ${formatBytes(fileSizeBytes)}). This suggests the file contains mostly metadata with very little model weight data.`,
+   937→      });
+   938→    }
+   939→  }
+   940→
+   941→  // ── Check if no metadata was found ──
+   942→  const meaningfulEntries = Object.keys(allEntries).filter(
+   943→    (k) => !k.startsWith("parse_") && k !== "first_16_bytes_hex" && k !== "first_16_bytes_ascii"
+   944→  );
+   945→  if (meaningfulEntries.length === 0 && detectedFormat !== "unknown") {
+   946→    vulnerabilities.push({
+   947→      id: "SCAN-NO-METADATA",
+   948→      severity: "LOW",
+   949→      description: "No model metadata found in file header",
+   950→      detail: `The file was recognized as "${detectedFormat}" format but no meaningful metadata could be extracted from the header.`,
+   951→    });
+   952→  }
+   953→
+   954→  return buildSbomResult(
+   955→    modelName,
+   956→    modelVersion,
+   957→    sha256Hash,
+   958→    fileSizeBytes,
+   959→    claimedFormat,
+   960→    detectedFormat,
+   961→    allEntries,
+   962→    tensorNames,
+   963→    tensorShapes,
+   964→    dataTypes,
+   965→    dependencies,
+   966→    vulnerabilities
+   967→  );
+   968→}
+   969→
+   970→// ───────────────────────────────────────────────
+   971→// Format matching logic
+   972→// ───────────────────────────────────────────────
+   973→
+   974→function formatMatchesClaimed(claimed: string, detected: DetectedFormat): boolean {
+   975→  const c = claimed.toLowerCase().trim();
+   976→
+   977→  switch (detected) {
+   978→    case "safetensors":
+   979→      return c === "safetensors";
+   980→    case "gguf":
+   981→      return c === "gguf";
+   982→    case "onnx":
+   983→      return c === "onnx";
+   984→    case "zip":
+   985→      return c === "pytorch" || c === "zip" || c === "huggingface";
+   986→    default:
+   987→      return c === "bin" || c === "unknown";
+   988→  }
+   989→}
+   990→
+   991→// ───────────────────────────────────────────────
+   992→// SBOM generation (CycloneDX 1.5 ML-BOM)
+   993→// ───────────────────────────────────────────────
+   994→
+   995→function buildSbomResult(
+   996→  modelName: string,
+   997→  modelVersion: string,
+   998→  sha256Hash: string,
+   999→  fileSizeBytes: number,
+  1000→  claimedFormat: string,
+  1001→  detectedFormat: string,
+  1002→  entries: Record<string, string>,
+  1003→  tensorNames: string[],
+  1004→  tensorShapes: string[],
+  1005→  dataTypes: string[],
+  1006→  dependencies: string[],
+  1007→  vulnerabilities: Vulnerability[]
+  1008→): SbomResult {
+  1009→  // Build properties from parsed entries
+  1010→  const properties: Array<{ name: string; value: string }> = [];
+  1011→
+  1012→  for (const [key, value] of Object.entries(entries)) {
+  1013→    properties.push({ name: key, value });
+  1014→  }
+  1015→
+  1016→  // Add derived properties
+  1017→  properties.push({ name: "scan.file_size_bytes", value: String(fileSizeBytes) });
+  1018→  properties.push({ name: "scan.claimed_format", value: claimedFormat });
+  1019→  properties.push({ name: "scan.detected_format", value: detectedFormat });
+  1020→  properties.push({ name: "scan.tensor_count", value: String(tensorNames.length) });
+  1021→  properties.push({ name: "scan.unique_data_types", value: [...new Set(dataTypes)].join(", ") || "none" });
+  1022→
+  1023→  if (sha256Hash) {
+  1024→    properties.push({ name: "sha256", value: sha256Hash });
+  1025→  }
+  1026→
+  1027→  // Build components (dependencies)
+  1028→  const components: Array<Record<string, unknown>> = [];
+  1029→
+  1030→  for (const dep of dependencies) {
+  1031→    let name = dep;
+  1032→    let version = "unknown";
+  1033→    let type = "library";
+  1034→
+  1035→    if (dep.includes("==")) {
+  1036→      const parts = dep.split("==");
+  1037→      name = parts[0];
+  1038→      version = parts[1];
+  1039→    } else if (dep.startsWith("tokenizer:")) {
+  1040→      name = dep.substring(9);
+  1041→      type = "tokenizer";
+  1042→    } else if (dep.startsWith("torch")) {
+  1043→      name = "pytorch";
+  1044→      type = "framework";
+  1045→    } else if (dep.includes("transformers")) {
+  1046→      name = "transformers";
+  1047→      type = "framework";
+  1048→    } else if (dep === "llama.cpp") {
+  1049→      name = "llama.cpp";
+  1050→      type = "framework";
+  1051→    } else if (dep === "huggingface_hub") {
+  1052→      name = "huggingface_hub";
+  1053→      type = "library";
+  1054→    }
+  1055→
+  1056→    components.push({
+  1057→      type: type,
+  1058→      name: name,
+  1059→      version: version,
+  1060→      purl: `pkg:pypi/${name}@${version}`,
+  1061→    });
+  1062→  }
+  1063→
+  1064→  // Count unique data types as additional "components"
+  1065→  const uniqueTypes = [...new Set(dataTypes)];
+  1066→  if (uniqueTypes.length > 0) {
+  1067→    components.push({
+  1068→      type: "data-type-set",
+  1069→      name: "model_data_types",
+  1070→      version: "1.0.0",
+  1071→      description: uniqueTypes.join(", "),
+  1072→    });
+  1073→  }
+  1074→
+  1075→  // Build CycloneDX SBOM
+  1076→  const sbom = {
+  1077→    bomFormat: "CycloneDX",
+  1078→    specVersion: "1.5",
+  1079→    metadata: {
+  1080→      component: {
+  1081→        name: modelName,
+  1082→        version: modelVersion,
+  1083→        type: "ml-model",
+  1084→        properties,
+  1085→      },
+  1086→    },
+  1087→    components: components.length > 0 ? components : undefined,
+  1088→    vulnerabilities: vulnerabilities.length > 0
+  1089→      ? vulnerabilities.map((v) => ({
+  1090→          id: v.id,
+  1091→          severity: v.severity,
+  1092→          description: v.description,
+  1093→          detail: v.detail,
+  1094→          analysis: {
+  1095→            state: "in_triage",
+  1096→            response: [],
+  1097→          },
+  1098→        }))
+  1099→      : undefined,
+  1100→  };
+  1101→
+  1102→  // Count severity
+  1103→  const criticalCount = vulnerabilities.filter((v) => v.severity === "CRITICAL").length;
+  1104→  const highCount = vulnerabilities.filter((v) => v.severity === "HIGH").length;
+  1105→  const mediumCount = vulnerabilities.filter((v) => v.severity === "MEDIUM").length;
+  1106→  const lowCount = vulnerabilities.filter((v) => v.severity === "LOW").length;
+  1107→
+  1108→  return {
+  1109→    sbomJson: JSON.stringify(sbom, null, 2),
+  1110→    vulnerabilities,
+  1111→    criticalCount,
+  1112→    highCount,
+  1113→    mediumCount,
+  1114→    lowCount,
+  1115→    totalDeps: dependencies.length,
+  1116→  };
+  1117→}
+  1118→
+  1119→// ───────────────────────────────────────────────
+  1120→// Utility: read file from storage path
+  1121→// ───────────────────────────────────────────────
+  1122→
+  1123→/**
+  1124→ * Read a model file from disk.
+  1125→ * `storagePath` is relative to project root (e.g. "uploads/org/model/version/file.bin").
+  1126→ */
+  1127→export async function readFileFromStorage(storagePath: string): Promise<Buffer> {
+  1128→  const fullPath = path.resolve(process.cwd(), storagePath);
+  1129→  return fs.readFile(fullPath);
+  1130→}
+  1131→
+  1132→// ───────────────────────────────────────────────
+  1133→// Utility: format bytes for human display
+  1134→// ───────────────────────────────────────────────
+  1135→
+  1136→function formatBytes(bytes: number): string {
+  1137→  if (bytes === 0) return "0 B";
+  1138→  const k = 1024;
+  1139→  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  1140→  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  1141→  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  1142→}

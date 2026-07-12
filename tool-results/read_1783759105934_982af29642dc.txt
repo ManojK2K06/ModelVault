@@ -1,0 +1,585 @@
+     1→   500→   500→   500→              </Button>
+     2→   501→   501→   501→              <Button
+     3→   502→   502→   502→                variant="outline"
+     4→   503→   503→   503→                size="sm"
+     5→   504→   504→   504→                onClick={handleDelete}
+     6→   505→   505→   505→                disabled={deleting}
+     7→   506→   506→   506→                className="gap-2 text-red-500 hover:text-red-500"
+     8→   507→   507→   507→              >
+     9→   508→   508→   508→                {deleting ? (
+    10→   509→   509→   509→                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+    11→   510→   510→   510→                ) : (
+    12→   511→   511→   511→                  <Trash2 className="h-4 w-4" />
+    13→   512→   512→   512→                )}
+    14→   513→   513→   513→                Delete
+    15→   514→   514→   514→              </Button>
+    16→   515→   515→   515→            </div>
+    17→   516→   516→   516→          </div>
+    18→   517→   517→   517→        </div>
+    19→   518→   518→   518→
+    20→   519→   519→   519→        <Separator />
+    21→   520→   520→   520→
+    22→   521→   521→   521→        {/* Tabs */}
+    23→   522→   522→   522→        <Tabs defaultValue="overview" className="space-y-4">
+    24→   523→   523→   523→          <TabsList>
+    25→   524→   524→   524→            <TabsTrigger value="overview">Overview</TabsTrigger>
+    26→   525→   525→   525→            <TabsTrigger value="versions">Versions ({model.versions.length})</TabsTrigger>
+    27→   526→   526→   526→            <TabsTrigger value="scan-results">Scan Results</TabsTrigger>
+    28→   527→   527→   527→            <TabsTrigger value="sandbox">Sandbox ({sandboxJobs.length})</TabsTrigger>
+    29→   528→   528→   528→          </TabsList>
+    30→   529→   529→   529→
+    31→   530→   530→   530→          {/* ── Tab 1: Overview ─────────────────────────────────────────── */}
+    32→   531→   531→   531→          <TabsContent value="overview" className="space-y-4">
+    33→   532→   532→   532→            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    34→   533→   533→   533→              {/* Signature Status Card */}
+    35→   534→   534→   534→              <Card>
+    36→   535→   535→   535→                <CardHeader className="pb-3">
+    37→   536→   536→   536→                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+    38→   537→   537→   537→                    <Shield className="h-4 w-4 text-emerald-500" />
+    39→   538→   538→   538→                    Signature Status
+    40→   539→   539→   539→                  </CardTitle>
+    41→   540→   540→   540→                </CardHeader>
+    42→   541→   541→   541→                <CardContent className="space-y-3">
+    43→   542→   542→   542→                  {sig ? (
+    44→   543→   543→   543→                    <>
+    45→   544→   544→   544→                      <div className="flex items-center justify-between">
+    46→   545→   545→   545→                        <span className="text-xs text-muted-foreground">Signer</span>
+    47→   546→   546→   546→                        <span className="text-sm font-medium">{sig.signerIdentity ?? sig.signerEmail}</span>
+    48→   547→   547→   547→                      </div>
+    49→   548→   548→   548→                      <div className="flex items-center justify-between">
+    50→   549→   549→   549→                        <span className="text-xs text-muted-foreground">Signed</span>
+    51→   550→   550→   550→                        <span className="text-sm text-muted-foreground">
+    52→   551→   551→   551→                          {formatDistanceToNow(new Date(sig.createdAt), { addSuffix: true })}
+    53→   552→   552→   552→                        </span>
+    54→   553→   553→   553→                      </div>
+    55→   554→   554→   554→                      <div className="flex items-center justify-between">
+    56→   555→   555→   555→                        <span className="text-xs text-muted-foreground">Verification</span>
+    57→   556→   556→   556→                        <Badge
+    58→   557→   557→   557→                          variant="outline"
+    59→   558→   558→   558→                          className={
+    60→   559→   559→   559→                            sig.verifiedAt
+    61→   560→   560→   560→                              ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25'
+    62→   561→   561→   561→                              : 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+    63→   562→   562→   562→                          }
+    64→   563→   563→   563→                        >
+    65→   564→   564→   564→                          {sig.verifiedAt ? (
+    66→   565→   565→   565→                            <span className="flex items-center gap-1">
+    67→   566→   566→   566→                              <CheckCircle2 className="h-3 w-3" /> Verified
+    68→   567→   567→   567→                            </span>
+    69→   568→   568→   568→                          ) : (
+    70→   569→   569→   569→                            'Unverified'
+    71→   570→   570→   570→                          )}
+    72→   571→   571→   571→                        </Badge>
+    73→   572→   572→   572→                      </div>
+    74→   573→   573→   573→                      {!sig.verifiedAt && (
+    75→   574→   574→   574→                        <Button
+    76→   575→   575→   575→                          variant="outline"
+    77→   576→   576→   576→                          size="sm"
+    78→   577→   577→   577→                          className="w-full mt-2"
+    79→   578→   578→   578→                          onClick={() => toast({ title: 'Verification initiated' })}
+    80→   579→   579→   579→                        >
+    81→   580→   580→   580→                          Verify Now
+    82→   581→   581→   581→                        </Button>
+    83→   582→   582→   582→                      )}
+    84→   583→   583→   583→                    </>
+    85→   584→   584→   584→                  ) : (
+    86→   585→   585→   585→                    <div className="text-center py-4">
+    87→   586→   586→   586→                      <Shield className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+    88→   587→   587→   587→                      <p className="text-sm text-muted-foreground">Not signed</p>
+    89→   588→   588→   588→                    </div>
+    90→   589→   589→   589→                  )}
+    91→   590→   590→   590→                </CardContent>
+    92→   591→   591→   591→              </Card>
+    93→   592→   592→   592→
+    94→   593→   593→   593→              {/* SBOM Summary Card */}
+    95→   594→   594→   594→              <Card>
+    96→   595→   595→   595→                <CardHeader className="pb-3">
+    97→   596→   596→   596→                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+    98→   597→   597→   597→                    <FileText className="h-4 w-4 text-amber-500" />
+    99→   598→   598→   598→                    SBOM Summary
+   100→   599→   599→   599→                  </CardTitle>
+   101→   600→   600→   600→                </CardHeader>
+   102→   601→   601→   601→                <CardContent className="space-y-3">
+   103→   602→   602→   602→                  {sbom ? (
+   104→   603→   603→   603→                    <>
+   105→   604→   604→   604→                      <div className="flex items-center justify-between">
+   106→   605→   605→   605→                        <span className="text-xs text-muted-foreground">Dependencies</span>
+   107→   606→   606→   606→                        <span className="text-sm font-medium">{sbom.totalDeps}</span>
+   108→   607→   607→   607→                      </div>
+   109→   608→   608→   608→                      <Separator />
+   110→   609→   609→   609→                      <div className="flex flex-wrap gap-1.5">
+   111→   610→   610→   610→                        {sbom.criticalCount > 0 && (
+   112→   611→   611→   611→                          <Badge variant="outline" className={SEVERITY_COLORS.CRITICAL + ' text-xs'}>
+   113→   612→   612→   612→                            {sbom.criticalCount} Critical
+   114→   613→   613→   613→                          </Badge>
+   115→   614→   614→   614→                        )}
+   116→   615→   615→   615→                        {sbom.highCount > 0 && (
+   117→   616→   616→   616→                          <Badge variant="outline" className={SEVERITY_COLORS.HIGH + ' text-xs'}>
+   118→   617→   617→   617→                            {sbom.highCount} High
+   119→   618→   618→   618→                          </Badge>
+   120→   619→   619→   619→                        )}
+   121→   620→   620→   620→                        {sbom.mediumCount > 0 && (
+   122→   621→   621→   621→                          <Badge variant="outline" className={SEVERITY_COLORS.MEDIUM + ' text-xs'}>
+   123→   622→   622→   622→                            {sbom.mediumCount} Medium
+   124→   623→   623→   623→                          </Badge>
+   125→   624→   624→   624→                        )}
+   126→   625→   625→   625→                        {sbom.lowCount > 0 && (
+   127→   626→   626→   626→                          <Badge variant="outline" className={SEVERITY_COLORS.LOW + ' text-xs'}>
+   128→   627→   627→   627→                            {sbom.lowCount} Low
+   129→   628→   628→   628→                          </Badge>
+   130→   629→   629→   629→                        )}
+   131→   630→   630→   630→                        {sbom.criticalCount === 0 && sbom.highCount === 0 && sbom.mediumCount === 0 && sbom.lowCount === 0 && (
+   132→   631→   631→   631→                          <Badge variant="outline" className="text-xs text-emerald-500">
+   133→   632→   632→   632→                            No vulnerabilities
+   134→   633→   633→   633→                          </Badge>
+   135→   634→   634→   634→                        )}
+   136→   635→   635→   635→                      </div>
+   137→   636→   636→   636→                      <Button
+   138→   637→   637→   637→                        variant="outline"
+   139→   638→   638→   638→                        size="sm"
+   140→   639→   639→   639→                        className="w-full mt-2"
+   141→   640→   640→   640→                        onClick={() => setSbomDialogOpen(true)}
+   142→   641→   641→   641→                      >
+   143→   642→   642→   642→                        <FileText className="h-4 w-4 mr-1.5" />
+   144→   643→   643→   643→                        View Full SBOM
+   145→   644→   644→   644→                      </Button>
+   146→   645→   645→   645→                    </>
+   147→   646→   646→   646→                  ) : (
+   148→   647→   647→   647→                    <div className="text-center py-4">
+   149→   648→   648→   648→                      <FileText className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+   150→   649→   649→   649→                      <p className="text-sm text-muted-foreground">No SBOM generated</p>
+   151→   650→   650→   650→                      <Button
+   152→   651→   651→   651→                        variant="outline"
+   153→   652→   652→   652→                        size="sm"
+   154→   653→   653→   653→                        className="mt-2"
+   155→   654→   654→   654→                        onClick={handleScan}
+   156→   655→   655→   655→                        disabled={scanning}
+   157→   656→   656→   656→                      >
+   158→   657→   657→   657→                        Run Scan
+   159→   658→   658→   658→                      </Button>
+   160→   659→   659→   659→                    </div>
+   161→   660→   660→   660→                  )}
+   162→   661→   661→   661→                </CardContent>
+   163→   662→   662→   662→              </Card>
+   164→   663→   663→   663→
+   165→   664→   664→   664→              {/* Latest Scan Result Card */}
+   166→   665→   665→   665→              <Card>
+   167→   666→   666→   666→                <CardHeader className="pb-3">
+   168→   667→   667→   667→                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+   169→   668→   668→   668→                    <ScanLine className="h-4 w-4 text-sky-500" />
+   170→   669→   669→   669→                    Latest Scan Result
+   171→   670→   670→   670→                  </CardTitle>
+   172→   671→   671→   671→                </CardHeader>
+   173→   672→   672→   672→                <CardContent className="space-y-3">
+   174→   673→   673→   673→                  {latestVersion ? (
+   175→   674→   674→   674→                    <>
+   176→   675→   675→   675→                      <div className="flex items-center justify-between">
+   177→   676→   676→   676→                        <span className="text-xs text-muted-foreground">Status</span>
+   178→   677→   677→   677→                        <Badge
+   179→   678→   678→   678→                          variant="outline"
+   180→   679→   679→   679→                          className={
+   181→   680→   680→   680→                            overallScanStatus === 'passed'
+   182→   681→   681→   681→                              ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25'
+   183→   682→   682→   682→                              : overallScanStatus === 'failed'
+   184→   683→   683→   683→                                ? 'bg-red-500/15 text-red-500 border-red-500/25'
+   185→   684→   684→   684→                                : overallScanStatus === 'warning'
+   186→   685→   685→   685→                                  ? 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+   187→   686→   686→   686→                                  : 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+   188→   687→   687→   687→                          }
+   189→   688→   688→   688→                        >
+   190→   689→   689→   689→                          {overallScanStatus.charAt(0).toUpperCase() + overallScanStatus.slice(1)}
+   191→   690→   690→   690→                        </Badge>
+   192→   691→   691→   691→                      </div>
+   193→   692→   692→   692→                      <div className="flex items-center justify-between">
+   194→   693→   693→   693→                        <span className="text-xs text-muted-foreground">Version</span>
+   195→   694→   694→   694→                        <span className="text-sm">{latestVersion.version}</span>
+   196→   695→   695→   695→                      </div>
+   197→   696→   696→   696→                      <div className="flex items-center justify-between">
+   198→   697→   697→   697→                        <span className="text-xs text-muted-foreground">Scanned</span>
+   199→   698→   698→   698→                        <span className="text-sm text-muted-foreground">
+   200→   699→   699→   699→                          {formatDistanceToNow(new Date(latestVersion.uploadedAt), { addSuffix: true })}
+   201→   700→   700→   700→                        </span>
+   202→   701→   701→   701→                      </div>
+   203→   702→   702→   702→                      <Button
+   204→   703→   703→   703→                        variant="outline"
+   205→   704→   704→   704→                        size="sm"
+   206→   705→   705→   705→                        className="w-full mt-2"
+   207→   706→   706→   706→                        onClick={() => {
+   208→   707→   707→   707→                          const tabsEl = document.querySelector('[value="scan-results"]') as HTMLElement;
+   209→   708→   708→   708→                          tabsEl?.click();
+   210→   709→   709→   709→                        }}
+   211→   710→   710→   710→                      >
+   212→   711→   711→   711→                        <Eye className="h-4 w-4 mr-1.5" />
+   213→   712→   712→   712→                        View Scan Results
+   214→   713→   713→   713→                      </Button>
+   215→   714→   714→   714→                    </>
+   216→   715→   715→   715→                  ) : (
+   217→   716→   716→   716→                    <div className="text-center py-4">
+   218→   717→   717→   717→                      <ScanLine className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+   219→   718→   718→   718→                      <p className="text-sm text-muted-foreground">No scans available</p>
+   220→   719→   719→   719→                    </div>
+   221→   720→   720→   720→                  )}
+   222→   721→   721→   721→                </CardContent>
+   223→   722→   722→   722→              </Card>
+   224→   723→   723→   723→            </div>
+   225→   724→   724→   724→          </TabsContent>
+   226→   725→   725→   725→
+   227→   726→   726→   726→          {/* ── Tab 2: Versions ─────────────────────────────────────────── */}
+   228→   727→   727→   727→          <TabsContent value="versions">
+   229→   728→   728→   728→            <div className="rounded-lg border bg-card overflow-hidden">
+   230→   729→   729→   729→              <div className="overflow-x-auto">
+   231→   730→   730→   730→                <Table>
+   232→   731→   731→   731→                  <TableHeader>
+   233→   732→   732→   732→                    <TableRow className="border-border hover:bg-transparent">
+   234→   733→   733→   733→                      <TableHead>Version</TableHead>
+   235→   734→   734→   734→                      <TableHead>File Size</TableHead>
+   236→   735→   735→   735→                      <TableHead>SHA-256</TableHead>
+   237→   736→   736→   736→                      <TableHead>Upload Date</TableHead>
+   238→   737→   737→   737→                      <TableHead>Signature</TableHead>
+   239→   738→   738→   738→                      <TableHead>Actions</TableHead>
+   240→   739→   739→   739→                    </TableRow>
+   241→   740→   740→   740→                  </TableHeader>
+   242→   741→   741→   741→                  <TableBody>
+   243→   742→   742→   742→                    {model.versions.length === 0 ? (
+   244→   743→   743→   743→                      <TableRow>
+   245→   744→   744→   744→                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+   246→   745→   745→   745→                          No versions available
+   247→   746→   746→   746→                        </TableCell>
+   248→   747→   747→   747→                      </TableRow>
+   249→   748→   748→   748→                    ) : (
+   250→   749→   749→   749→                      model.versions.map((v) => (
+   251→   750→   750→   750→                        <TableRow key={v.id} className="border-border hover:bg-muted/40 transition-colors">
+   252→   751→   751→   751→                          <TableCell className="font-medium font-mono text-sm">
+   253→   752→   752→   752→                            {v.version}
+   254→   753→   753→   753→                          </TableCell>
+   255→   754→   754→   754→                          <TableCell className="text-sm text-muted-foreground">
+   256→   755→   755→   755→                            {v.fileSizeBytes > 0 ? formatBytes(v.fileSizeBytes) : '—'}
+   257→   756→   756→   756→                          </TableCell>
+   258→   757→   757→   757→                          <TableCell>
+   259→   758→   758→   758→                            <div className="flex items-center gap-1.5">
+   260→   759→   759→   759→                              <code className="text-xs text-muted-foreground font-mono">
+   261→   760→   760→   760→                                {truncateHash(v.sha256Hash)}
+   262→   761→   761→   761→                              </code>
+   263→   762→   762→   762→                              {v.sha256Hash && (
+   264→   763→   763→   763→                                <Tooltip>
+   265→   764→   764→   764→                                  <TooltipTrigger asChild>
+   266→   765→   765→   765→                                    <button
+   267→   766→   766→   766→                                      onClick={() => copyHash(v.sha256Hash)}
+   268→   767→   767→   767→                                      className="text-muted-foreground hover:text-foreground transition-colors"
+   269→   768→   768→   768→                                    >
+   270→   769→   769→   769→                                      {copiedHash === v.sha256Hash ? (
+   271→   770→   770→   770→                                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+   272→   771→   771→   771→                                      ) : (
+   273→   772→   772→   772→                                        <Copy className="h-3.5 w-3.5" />
+   274→   773→   773→   773→                                      )}
+   275→   774→   774→   774→                                    </button>
+   276→   775→   775→   775→                                  </TooltipTrigger>
+   277→   776→   776→   776→                                  <TooltipContent>Copy hash</TooltipContent>
+   278→   777→   777→   777→                                </Tooltip>
+   279→   778→   778→   778→                              )}
+   280→   779→   779→   779→                            </div>
+   281→   780→   780→   780→                          </TableCell>
+   282→   781→   781→   781→                          <TableCell className="text-sm text-muted-foreground">
+   283→   782→   782→   782→                            {formatDistanceToNow(new Date(v.uploadedAt), { addSuffix: true })}
+   284→   783→   783→   783→                          </TableCell>
+   285→   784→   784→   784→                          <TableCell>
+   286→   785→   785→   785→                            {v.signature ? (
+   287→   786→   786→   786→                              <Badge
+   288→   787→   787→   787→                                variant="outline"
+   289→   788→   788→   788→                                className="bg-emerald-500/15 text-emerald-500 border-emerald-500/25"
+   290→   789→   789→   789→                              >
+   291→   790→   790→   790→                                Signed
+   292→   791→   791→   791→                              </Badge>
+   293→   792→   792→   792→                            ) : (
+   294→   793→   793→   793→                              <Badge variant="outline" className="text-muted-foreground text-xs">
+   295→   794→   794→   794→                                Unsigned
+   296→   795→   795→   795→                              </Badge>
+   297→   796→   796→   796→                            )}
+   298→   797→   797→   797→                          </TableCell>
+   299→   798→   798→   798→                          <TableCell>
+   300→   799→   799→   799→                            <div className="flex items-center gap-1">
+   301→   800→   800→   800→                              <Tooltip>
+   302→   801→   801→   801→                                <TooltipTrigger asChild>
+   303→   802→   802→   802→                                  <Button
+   304→   803→   803→   803→                                    variant="ghost"
+   305→   804→   804→   804→                                    size="icon"
+   306→   805→   805→   805→                                    className="h-8 w-8"
+   307→   806→   806→   806→                                    onClick={() =>
+   308→   807→   807→   807→                                      toast({ title: 'Download started for ' + v.version })
+   309→   808→   808→   808→                                    }
+   310→   809→   809→   809→                                  >
+   311→   810→   810→   810→                                    <Download className="h-4 w-4" />
+   312→   811→   811→   811→                                  </Button>
+   313→   812→   812→   812→                                </TooltipTrigger>
+   314→   813→   813→   813→                                <TooltipContent>Download</TooltipContent>
+   315→   814→   814→   814→                              </Tooltip>
+   316→   815→   815→   815→                              {v.signature && (
+   317→   816→   816→   816→                                <Tooltip>
+   318→   817→   817→   817→                                  <TooltipTrigger asChild>
+   319→   818→   818→   818→                                    <Button
+   320→   819→   819→   819→                                      variant="ghost"
+   321→   820→   820→   820→                                      size="icon"
+   322→   821→   821→   821→                                      className="h-8 w-8"
+   323→   822→   822→   822→                                      onClick={() => toast({ title: 'Verification initiated' })}
+   324→   823→   823→   823→                                    >
+   325→   824→   824→   824→                                      <Shield className="h-4 w-4" />
+   326→   825→   825→   825→                                    </Button>
+   327→   826→   826→   826→                                  </TooltipTrigger>
+   328→   827→   827→   827→                                  <TooltipContent>Verify</TooltipContent>
+   329→   828→   828→   828→                                </Tooltip>
+   330→   829→   829→   829→                              )}
+   331→   830→   830→   830→                            </div>
+   332→   831→   831→   831→                          </TableCell>
+   333→   832→   832→   832→                        </TableRow>
+   334→   833→   833→   833→                      ))
+   335→   834→   834→   834→                    )}
+   336→   835→   835→   835→                  </TableBody>
+   337→   836→   836→   836→                </Table>
+   338→   837→   837→   837→              </div>
+   339→   838→   838→   838→            </div>
+   340→   839→   839→   839→          </TabsContent>
+   341→   840→   840→   840→
+   342→   841→   841→   841→          {/* ── Tab 3: Scan Results ─────────────────────────────────────── */}
+   343→   842→   842→   842→          <TabsContent value="scan-results">
+   344→   843→   843→   843→            {model.versions.filter((v) => v.scanResultJson).length === 0 ? (
+   345→   844→   844→   844→              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+   346→   845→   845→   845→                <ScanLine className="h-12 w-12 mb-4 opacity-40" />
+   347→   846→   846→   846→                <p className="text-lg font-medium">No scan results yet</p>
+   348→   847→   847→   847→                <p className="text-sm mt-1">Run a scan to generate SBOM and vulnerability reports</p>
+   349→   848→   848→   848→                <Button className="mt-4 gap-2" onClick={handleScan} disabled={scanning}>
+   350→   849→   849→   849→                  {scanning ? (
+   351→   850→   850→   850→                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   352→   851→   851→   851→                  ) : (
+   353→   852→   852→   852→                    <ScanLine className="h-4 w-4" />
+   354→   853→   853→   853→                  )}
+   355→   854→   854→   854→                  Run Scan
+   356→   855→   855→   855→                </Button>
+   357→   856→   856→   856→              </div>
+   358→   857→   857→   857→            ) : (
+   359→   858→   858→   858→              <Accordion type="multiple" className="space-y-2">
+   360→   859→   859→   859→                {model.versions
+   361→   860→   860→   860→                  .filter((v) => v.scanResultJson)
+   362→   861→   861→   861→                  .map((v) => {
+   363→   862→   862→   862→                    let parsed: Record<string, unknown> | null = null;
+   364→   863→   863→   863→                    try {
+   365→   864→   864→   864→                      parsed = JSON.parse(v.scanResultJson!);
+   366→   865→   865→   865→                    } catch {
+   367→   866→   866→   866→                      // ignore
+   368→   867→   867→   867→                    }
+   369→   868→   868→   868→                    const statusColor =
+   370→   869→   869→   869→                      (parsed?.critical as number) > 0
+   371→   870→   870→   870→                        ? 'bg-red-500/15 text-red-500 border-red-500/25'
+   372→   871→   871→   871→                        : (parsed?.high as number) > 0
+   373→   872→   872→   872→                          ? 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+   374→   873→   873→   873→                          : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25';
+   375→   874→   874→   874→                    const statusLabel =
+   376→   875→   875→   875→                      (parsed?.critical as number) > 0
+   377→   876→   876→   876→                        ? 'Failed'
+   378→   877→   877→   877→                        : (parsed?.high as number) > 0
+   379→   878→   878→   878→                          ? 'Warning'
+   380→   879→   879→   879→                          : 'Passed';
+   381→   880→   880→   880→
+   382→   881→   881→   881→                    return (
+   383→   882→   882→   882→                      <AccordionItem
+   384→   883→   883→   883→                        key={v.id}
+   385→   884→   884→   884→                        value={v.id}
+   386→   885→   885→   885→                        className="rounded-lg border bg-card px-4 data-[state=open]:border-primary/30"
+   387→   886→   886→   886→                      >
+   388→   887→   887→   887→                        <AccordionTrigger className="hover:no-underline py-4">
+   389→   888→   888→   888→                          <div className="flex items-center gap-3">
+   390→   889→   889→   889→                            <span className="font-mono text-sm font-medium">{v.version}</span>
+   391→   890→   890→   890→                            <Badge variant="outline" className={statusColor}>
+   392→   891→   891→   891→                              {statusLabel}
+   393→   892→   892→   892→                            </Badge>
+   394→   893→   893→   893→                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+   395→   894→   894→   894→                              <Clock className="h-3 w-3" />
+   396→   895→   895→   895→                              {formatDistanceToNow(new Date(v.uploadedAt), { addSuffix: true })}
+   397→   896→   896→   896→                            </span>
+   398→   897→   897→   897→                          </div>
+   399→   898→   898→   898→                        </AccordionTrigger>
+   400→   899→   899→   899→                        <AccordionContent className="pb-4">
+   401→   900→   900→   900→                          <div className="rounded-md bg-muted/50 p-4 overflow-x-auto max-h-96 overflow-y-auto custom-scrollbar">
+   402→   901→   901→   901→                            <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-words">
+   403→   902→   902→   902→                              <code>{JSON.stringify(parsed, null, 2)}</code>
+   404→   903→   903→   903→                            </pre>
+   405→   904→   904→   904→                          </div>
+   406→   905→   905→   905→                        </AccordionContent>
+   407→   906→   906→   906→                      </AccordionItem>
+   408→   907→   907→   907→                    );
+   409→   908→   908→   908→                  })}
+   410→   909→   909→   909→              </Accordion>
+   411→   910→   910→   910→            )}
+   412→   911→   911→   911→          </TabsContent>
+   413→   912→   912→   912→
+   414→   913→   913→   913→          {/* ── Tab 4: Sandbox ──────────────────────────────────────────── */}
+   415→   914→   914→   914→          <TabsContent value="sandbox">
+   416→   915→   915→   915→            {sandboxLoading ? (
+   417→   916→   916→   916→              <div className="space-y-3">
+   418→   917→   917→   917→                {[1, 2, 3].map((i) => (
+   419→   918→   918→   918→                  <Skeleton key={i} className="h-16 rounded-lg" />
+   420→   919→   919→   919→                ))}
+   421→   920→   920→   920→              </div>
+   422→   921→   921→   921→            ) : sandboxJobs.length === 0 ? (
+   423→   922→   922→   922→              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+   424→   923→   923→   923→                <Box className="h-12 w-12 mb-4 opacity-40" />
+   425→   924→   924→   924→                <p className="text-lg font-medium">No sandbox jobs yet</p>
+   426→   925→   925→   925→                <p className="text-sm mt-1">Start a sandbox to test model behavior in isolation</p>
+   427→   926→   926→   926→                <Button className="mt-4 gap-2" onClick={handleSandbox} disabled={sandboxing}>
+   428→   927→   927→   927→                  {sandboxing ? (
+   429→   928→   928→   928→                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+   430→   929→   929→   929→                  ) : (
+   431→   930→   930→   930→                    <Play className="h-4 w-4" />
+   432→   931→   931→   931→                  )}
+   433→   932→   932→   932→                  Start Sandbox
+   434→   933→   933→   933→                </Button>
+   435→   934→   934→   934→              </div>
+   436→   935→   935→   935→            ) : (
+   437→   936→   936→   936→              <Accordion type="multiple" className="space-y-2">
+   438→   937→   937→   937→                {sandboxJobs.map((job) => {
+   439→   938→   938→   938→                  let findings: SandboxFinding[] = [];
+   440→   939→   939→   939→                  if (job.resultJson) {
+   441→   940→   940→   940→                    try {
+   442→   941→   941→   941→                      const parsed = JSON.parse(job.resultJson);
+   443→   942→   942→   942→                      findings = parsed.findings ?? [];
+   444→   943→   943→   943→                    } catch {
+   445→   944→   944→   944→                      // ignore
+   446→   945→   945→   945→                    }
+   447→   946→   946→   946→                  }
+   448→   947→   947→   947→
+   449→   948→   948→   948→                  return (
+   450→   949→   949→   949→                    <AccordionItem
+   451→   950→   950→   950→                      key={job.id}
+   452→   951→   951→   951→                      value={job.id}
+   453→   952→   952→   952→                      className="rounded-lg border bg-card px-4 data-[state=open]:border-primary/30"
+   454→   953→   953→   953→                    >
+   455→   954→   954→   954→                      <AccordionTrigger className="hover:no-underline py-4">
+   456→   955→   955→   955→                        <div className="flex items-center gap-3 flex-wrap">
+   457→   956→   956→   956→                          <Badge
+   458→   957→   957→   957→                            variant="outline"
+   459→   958→   958→   958→                            className={SANDBOX_STATUS_COLORS[job.status] ?? 'text-muted-foreground'}
+   460→   959→   959→   959→                          >
+   461→   960→   960→   960→                            {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+   462→   961→   961→   961→                          </Badge>
+   463→   962→   962→   962→                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+   464→   963→   963→   963→                            <Clock className="h-3 w-3" />
+   465→   964→   964→   964→                            {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}
+   466→   965→   965→   965→                          </span>
+   467→   966→   966→   966→                          {job.durationMs != null && (
+   468→   967→   967→   967→                            <span className="text-xs text-muted-foreground">
+   469→   968→   968→   968→                              {Math.round(job.durationMs / 1000)}s
+   470→   969→   969→   969→                            </span>
+   471→   970→   970→   970→                          )}
+   472→   971→   971→   971→                          {job.submittedBy && (
+   473→   972→   972→   972→                            <span className="text-xs text-muted-foreground">
+   474→   973→   973→   973→                              by {job.submittedBy.name}
+   475→   974→   974→   974→                            </span>
+   476→   975→   975→   975→                          )}
+   477→   976→   976→   976→                        </div>
+   478→   977→   977→   977→                      </AccordionTrigger>
+   479→   978→   978→   978→                      <AccordionContent className="pb-4">
+   480→   979→   979→   979→                        {findings.length === 0 ? (
+   481→   980→   980→   980→                          <p className="text-sm text-muted-foreground">
+   482→   981→   981→   981→                            No results available{' '}
+   483→   982→   982→   982→                            {job.status === 'running' && '(job still in progress)'}
+   484→   983→   983→   983→                          </p>
+   485→   984→   984→   984→                        ) : (
+   486→   985→   985→   985→                          <div className="rounded-lg border overflow-hidden">
+   487→   986→   986→   986→                            <Table>
+   488→   987→   987→   987→                              <TableHeader>
+   489→   988→   988→   988→                                <TableRow className="border-border hover:bg-transparent">
+   490→   989→   989→   989→                                  <TableHead>Test</TableHead>
+   491→   990→   990→   990→                                  <TableHead className="w-[80px]">Result</TableHead>
+   492→   991→   991→   991→                                  <TableHead className="w-[90px]">Severity</TableHead>
+   493→   992→   992→   992→                                  <TableHead className="min-w-[200px]">Description</TableHead>
+   494→   993→   993→   993→                                  <TableHead>Evidence</TableHead>
+   495→   994→   994→   994→                                </TableRow>
+   496→   995→   995→   995→                              </TableHeader>
+   497→   996→   996→   996→                              <TableBody>
+   498→   997→   997→   997→                                {findings.map((f, i) => {
+   499→   998→   998→   998→                                  const severity =
+   500→   999→   999→   999→                                    f.result === 'failed' ? 'HIGH' : f.result === 'warning' ? 'MEDIUM' : 'LOW';
+   501→  1000→  1000→  1000→                                  return (
+   502→  1001→  1001→  1001→                                    <TableRow
+   503→  1002→  1002→  1002→                                      key={i}
+   504→  1003→  1003→  1003→                                      className="border-border hover:bg-muted/40 transition-colors"
+   505→  1004→  1004→  1004→                                    >
+   506→  1005→  1005→  1005→                                      <TableCell className="font-mono text-sm">
+   507→  1006→  1006→  1006→                                        {f.probe}
+   508→  1007→  1007→  1007→                                      </TableCell>
+   509→  1008→  1008→  1008→                                      <TableCell>
+   510→  1009→  1009→  1009→                                        <Badge
+   511→  1010→  1010→  1010→                                          variant="outline"
+   512→  1011→  1011→  1011→                                          className={
+   513→  1012→  1012→  1012→                                            f.result === 'ok'
+   514→  1013→  1013→  1013→                                              ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25'
+   515→  1014→  1014→  1014→                                              : f.result === 'warning'
+   516→  1015→  1015→  1015→                                                ? 'bg-amber-500/15 text-amber-500 border-amber-500/25'
+   517→  1016→  1016→  1016→                                                : 'bg-red-500/15 text-red-500 border-red-500/25'
+   518→  1017→  1017→  1017→                                          }
+   519→  1018→  1018→  1018→                                        >
+   520→  1019→  1019→  1019→                                          {f.result === 'passed' || f.result === 'ok' ? (
+   521→  1020→  1020→  1020→                                            <span className="flex items-center gap-1">
+   522→  1021→  1021→  1021→                                              <CheckCircle2 className="h-3 w-3" /> PASS
+   523→  1022→  1022→  1022→                                            </span>
+   524→  1023→  1023→  1023→                                          ) : f.result === 'warning' ? (
+   525→  1024→  1024→  1024→                                            'WARN'
+   526→  1025→  1025→  1025→                                          ) : (
+   527→  1026→  1026→  1026→                                            <span className="flex items-center gap-1">
+   528→  1027→  1027→  1027→                                              <XCircle className="h-3 w-3" /> FAIL
+   529→  1028→  1028→  1028→                                            </span>
+   530→  1029→  1029→  1029→                                          )}
+   531→  1030→  1030→  1030→                                        </Badge>
+   532→  1031→  1031→  1031→                                      </TableCell>
+   533→  1032→  1032→  1032→                                      <TableCell>
+   534→  1033→  1033→  1033→                                        <Badge
+   535→  1034→  1034→  1034→                                          variant="outline"
+   536→  1035→  1035→  1035→                                          className={SEVERITY_COLORS[severity] + ' text-xs'}
+   537→  1036→  1036→  1036→                                        >
+   538→  1037→  1037→  1037→                                          {severity}
+   539→  1038→  1038→  1038→                                        </Badge>
+   540→  1039→  1039→  1039→                                      </TableCell>
+   541→  1040→  1040→  1040→                                      <TableCell className="text-sm text-muted-foreground">
+   542→  1041→  1041→  1041→                                        {f.detail}
+   543→  1042→  1042→  1042→                                      </TableCell>
+   544→  1043→  1043→  1043→                                      <TableCell className="text-xs text-muted-foreground">
+   545→  1044→  1044→  1044→                                        {f.probe}-{f.result}
+   546→  1045→  1045→  1045→                                      </TableCell>
+   547→  1046→  1046→  1046→                                    </TableRow>
+   548→  1047→  1047→  1047→                                  );
+   549→  1048→  1048→  1048→                                })}
+   550→  1049→  1049→  1049→                              </TableBody>
+   551→  1050→  1050→  1050→                            </Table>
+   552→  1051→  1051→  1051→                          </div>
+   553→  1052→  1052→  1052→                        )}
+   554→  1053→  1053→  1053→                      </AccordionContent>
+   555→  1054→  1054→  1054→                    </AccordionItem>
+   556→  1055→  1055→  1055→                  );
+   557→  1056→  1056→  1056→                })}
+   558→  1057→  1057→  1057→              </Accordion>
+   559→  1058→  1058→  1058→            )}
+   560→  1059→  1059→  1059→          </TabsContent>
+   561→  1060→  1060→  1060→        </Tabs>
+   562→  1061→  1061→  1061→
+   563→  1062→  1062→  1062→        {/* SBOM Dialog */}
+   564→  1063→  1063→  1063→        <Dialog open={sbomDialogOpen} onOpenChange={setSbomDialogOpen}>
+   565→  1064→  1064→  1064→          <DialogContent className="sm:max-w-[700px] max-h-[80vh] flex flex-col">
+   566→  1065→  1065→  1065→            <DialogHeader>
+   567→  1066→  1066→  1066→              <DialogTitle className="flex items-center gap-2">
+   568→  1067→  1067→  1067→                <FileText className="h-5 w-5" />
+   569→  1068→  1068→  1068→                SBOM — CycloneDX ML-BOM
+   570→  1069→  1069→  1069→              </DialogTitle>
+   571→  1070→  1070→  1070→              <DialogDescription>
+   572→  1071→  1071→  1071→                Full Software Bill of Materials for {model.name}
+   573→  1072→  1072→  1072→              </DialogDescription>
+   574→  1073→  1073→  1073→            </DialogHeader>
+   575→  1074→  1074→  1074→            <div className="flex-1 overflow-y-auto rounded-md bg-muted/50 p-4 max-h-[60vh] custom-scrollbar">
+   576→  1075→  1075→  1075→              <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-words">
+   577→  1076→  1076→  1076→                <code>{buildSbomJson()}</code>
+   578→  1077→  1077→  1077→              </pre>
+   579→  1078→  1078→  1078→            </div>
+   580→  1079→  1079→  1079→          </DialogContent>
+   581→  1080→  1080→  1080→        </Dialog>
+   582→  1081→  1081→  1081→      </div>
+   583→  1082→  1082→  1082→    </TooltipProvider>
+   584→  1083→  1083→  1083→  );
+   585→  1084→  1084→  1084→}

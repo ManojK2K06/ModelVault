@@ -1,0 +1,602 @@
+     1→     1→     1→     1→'use client';
+     2→     2→     2→     2→
+     3→     3→     3→     3→import { useState, useEffect, useCallback } from 'react';
+     4→     4→     4→     4→import { useAppStore } from '@/lib/store';
+     5→     5→     5→     5→import { useToast } from '@/hooks/use-toast';
+     6→     6→     6→     6→import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+     7→     7→     7→     7→import { Button } from '@/components/ui/button';
+     8→     8→     8→     8→import { Input } from '@/components/ui/input';
+     9→     9→     9→     9→import { Textarea } from '@/components/ui/textarea';
+    10→    10→    10→    10→import { Label } from '@/components/ui/label';
+    11→    11→    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→    12→    12→import { Separator } from '@/components/ui/separator';
+    13→    13→    13→    13→import { Skeleton } from '@/components/ui/skeleton';
+    14→    14→    14→    14→import {
+    15→    15→    15→    15→  Dialog,
+    16→    16→    16→    16→  DialogContent,
+    17→    17→    17→    17→  DialogHeader,
+    18→    18→    18→    18→  DialogTitle,
+    19→    19→    19→    19→  DialogDescription,
+    20→    20→    20→    20→  DialogFooter,
+    21→    21→    21→    21→} from '@/components/ui/dialog';
+    22→    22→    22→    22→import {
+    23→    23→    23→    23→  Table,
+    24→    24→    24→    24→  TableHeader,
+    25→    25→    25→    25→  TableRow,
+    26→    26→    26→    26→  TableHead,
+    27→    27→    27→    27→  TableBody,
+    28→    28→    28→    28→  TableCell,
+    29→    29→    29→    29→} from '@/components/ui/table';
+    30→    30→    30→    30→import {
+    31→    31→    31→    31→  Select,
+    32→    32→    32→    32→  SelectContent,
+    33→    33→    33→    33→  SelectItem,
+    34→    34→    34→    34→  SelectTrigger,
+    35→    35→    35→    35→  SelectValue,
+    36→    36→    36→    36→} from '@/components/ui/select';
+    37→    37→    37→    37→import {
+    38→    38→    38→    38→  ArrowLeft,
+    39→    39→    39→    39→  Plus,
+    40→    40→    40→    40→  Shield,
+    41→    41→    41→    41→  ExternalLink,
+    42→    42→    42→    42→  Edit,
+    43→    43→    43→    43→  Check,
+    44→    44→    44→    44→  XCircle,
+    45→    45→    45→    45→  Building2,
+    46→    46→    46→    46→  FileCode,
+    47→    47→    47→    47→} from 'lucide-react';
+    48→    48→    48→    48→import { formatDistanceToNow } from 'date-fns';
+    49→    49→    49→    49→
+    50→    50→    50→    50→// ── Types ─────────────────────────────────────────────────────────────────────
+    51→    51→    51→    51→
+    52→    52→    52→    52→interface RegistryArtifact {
+    53→    53→    53→    53→  id: string;
+    54→    54→    54→    54→  modelId: string;
+    55→    55→    55→    55→  versionId: string;
+    56→    56→    56→    56→  publishedAt: string;
+    57→    57→    57→    57→  gateResult: string;
+    58→    58→    58→    58→  gateReasons: string | null;
+    59→    59→    59→    59→  model: {
+    60→    60→    60→    60→    id: string;
+    61→    61→    61→    61→    name: string;
+    62→    62→    62→    62→    format: string;
+    63→    63→    63→    63→    status?: string;
+    64→    64→    64→    64→  };
+    65→    65→    65→    65→}
+    66→    66→    66→    66→
+    67→    67→    67→    67→interface Registry {
+    68→    68→    68→    68→  id: string;
+    69→    69→    69→    69→  name: string;
+    70→    70→    70→    70→  description: string | null;
+    71→    71→    71→    71→  policyRego: string;
+    72→    72→    72→    72→  artifactCount: number;
+    73→    73→    73→    73→  lastPublishAt: string | null;
+    74→    74→    74→    74→  createdAt: string;
+    75→    75→    75→    75→  updatedAt: string;
+    76→    76→    76→    76→  artifacts: RegistryArtifact[];
+    77→    77→    77→    77→}
+    78→    78→    78→    78→
+    79→    79→    79→    79→interface ModelOption {
+    80→    80→    80→    80→  id: string;
+    81→    81→    81→    81→  name: string;
+    82→    82→    82→    82→  format: string;
+    83→    83→    83→    83→  status: string;
+    84→    84→    84→    84→  latestVersion: {
+    85→    85→    85→    85→    id: string;
+    86→    86→    86→    86→    version: string;
+    87→    87→    87→    87→  } | null;
+    88→    88→    88→    88→}
+    89→    89→    89→    89→
+    90→    90→    90→    90→// ── Default Policy Template ───────────────────────────────────────────────────
+    91→    91→    91→    91→
+    92→    92→    92→    92→const DEFAULT_POLICY = `package modelvault.policy
+    93→    93→    93→    93→
+    94→    94→    94→    94→default allow = false
+    95→    95→    95→    95→
+    96→    96→    96→    96→# Only allow signed models
+    97→    97→    97→    97→allow {
+    98→    98→    98→    98→  input.model.status == "signed"
+    99→    99→    99→    99→}
+   100→   100→   100→   100→
+   101→   101→   101→   101→# Require SBOM scan to have passed
+   102→   102→   102→   102→allow {
+   103→   103→   103→   103→  input.model.scanStatus == "passed"
+   104→   104→   104→   104→}
+   105→   105→   105→   105→
+   106→   106→   106→   106→# Block models with critical vulnerabilities
+   107→   107→   107→   107→deny[msg] {
+   108→   108→   108→   108→  input.vulnerabilities[_].severity == "CRITICAL"
+   109→   109→   109→   109→  msg := sprintf("Critical vulnerability found: %v", [input.vulnerabilities[_].id])
+   110→   110→   110→   110→}`;
+   111→   111→   111→   111→
+   112→   112→   112→   112→// ── Helper ────────────────────────────────────────────────────────────────────
+   113→   113→   113→   113→
+   114→   114→   114→   114→function truncate(str: string, max: number) {
+   115→   115→   115→   115→  if (!str) return '';
+   116→   116→   116→   116→  return str.length > max ? str.slice(0, max) + '...' : str;
+   117→   117→   117→   117→}
+   118→   118→   118→   118→
+   119→   119→   119→   119→// ── Registries List ───────────────────────────────────────────────────────────
+   120→   120→   120→   120→
+   121→   121→   121→   121→function RegistriesList() {
+   122→   122→   122→   122→  const { navigate } = useAppStore();
+   123→   123→   123→   123→  const { toast } = useToast();
+   124→   124→   124→   124→  const [registries, setRegistries] = useState<Registry[]>([]);
+   125→   125→   125→   125→  const [loading, setLoading] = useState(true);
+   126→   126→   126→   126→  const [createOpen, setCreateOpen] = useState(false);
+   127→   127→   127→   127→  const [createForm, setCreateForm] = useState({
+   128→   128→   128→   128→    name: '',
+   129→   129→   129→   129→    description: '',
+   130→   130→   130→   130→    policyRego: DEFAULT_POLICY,
+   131→   131→   131→   131→  });
+   132→   132→   132→   132→  const [creating, setCreating] = useState(false);
+   133→   133→   133→   133→
+   134→   134→   134→   134→  const fetchRegistries = useCallback(async () => {
+   135→   135→   135→   135→    try {
+   136→   136→   136→   136→      const res = await fetch('/api/registries');
+   137→   137→   137→   137→      const data = await res.json();
+   138→   138→   138→   138→      if (data.items) setRegistries(data.items);
+   139→   139→   139→   139→    } catch {
+   140→   140→   140→   140→      toast({ title: 'Failed to load registries', variant: 'destructive' });
+   141→   141→   141→   141→    } finally {
+   142→   142→   142→   142→      setLoading(false);
+   143→   143→   143→   143→    }
+   144→   144→   144→   144→  }, [toast]);
+   145→   145→   145→   145→
+   146→   146→   146→   146→  useEffect(() => {
+   147→   147→   147→   147→    fetchRegistries();
+   148→   148→   148→   148→  }, [fetchRegistries]);
+   149→   149→   149→   149→
+   150→   150→   150→   150→  const handleCreate = async () => {
+   151→   151→   151→   151→    if (!createForm.name.trim()) return;
+   152→   152→   152→   152→    setCreating(true);
+   153→   153→   153→   153→    try {
+   154→   154→   154→   154→      const res = await fetch('/api/registries', {
+   155→   155→   155→   155→        method: 'POST',
+   156→   156→   156→   156→        headers: { 'Content-Type': 'application/json' },
+   157→   157→   157→   157→        body: JSON.stringify(createForm),
+   158→   158→   158→   158→      });
+   159→   159→   159→   159→      if (res.ok) {
+   160→   160→   160→   160→        toast({ title: 'Registry created successfully' });
+   161→   161→   161→   161→        setCreateOpen(false);
+   162→   162→   162→   162→        setCreateForm({ name: '', description: '', policyRego: DEFAULT_POLICY });
+   163→   163→   163→   163→        fetchRegistries();
+   164→   164→   164→   164→      } else {
+   165→   165→   165→   165→        const err = await res.json();
+   166→   166→   166→   166→        toast({ title: err.error || 'Failed to create registry', variant: 'destructive' });
+   167→   167→   167→   167→      }
+   168→   168→   168→   168→    } catch {
+   169→   169→   169→   169→      toast({ title: 'Failed to create registry', variant: 'destructive' });
+   170→   170→   170→   170→    } finally {
+   171→   171→   171→   171→      setCreating(false);
+   172→   172→   172→   172→    }
+   173→   173→   173→   173→  };
+   174→   174→   174→   174→
+   175→   175→   175→   175→  return (
+   176→   176→   176→   176→    <div className="space-y-6">
+   177→   177→   177→   177→      {/* Header */}
+   178→   178→   178→   178→      <div className="flex items-center justify-between">
+   179→   179→   179→   179→        <div className="flex items-center gap-3">
+   180→   180→   180→   180→          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+   181→   181→   181→   181→            <Building2 className="h-5 w-5 text-primary" />
+   182→   182→   182→   182→          </div>
+   183→   183→   183→   183→          <div>
+   184→   184→   184→   184→            <h1 className="text-2xl font-bold tracking-tight">Registries</h1>
+   185→   185→   185→   185→            <p className="text-sm text-muted-foreground">
+   186→   186→   186→   186→              Manage model registries and publication policies
+   187→   187→   187→   187→            </p>
+   188→   188→   188→   188→          </div>
+   189→   189→   189→   189→        </div>
+   190→   190→   190→   190→        <Button onClick={() => setCreateOpen(true)}>
+   191→   191→   191→   191→          <Plus className="mr-2 h-4 w-4" />
+   192→   192→   192→   192→          Create Registry
+   193→   193→   193→   193→        </Button>
+   194→   194→   194→   194→      </div>
+   195→   195→   195→   195→
+   196→   196→   196→   196→      {/* Loading Skeleton */}
+   197→   197→   197→   197→      {loading && (
+   198→   198→   198→   198→        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+   199→   199→   199→   199→          {[1, 2, 3].map((i) => (
+   200→   200→   200→   200→            <Card key={i}>
+   201→   201→   201→   201→              <CardHeader>
+   202→   202→   202→   202→                <Skeleton className="h-5 w-2/3" />
+   203→   203→   203→   203→                <Skeleton className="h-4 w-full" />
+   204→   204→   204→   204→              </CardHeader>
+   205→   205→   205→   205→              <CardContent>
+   206→   206→   206→   206→                <Skeleton className="h-4 w-1/3" />
+   207→   207→   207→   207→              </CardContent>
+   208→   208→   208→   208→            </Card>
+   209→   209→   209→   209→          ))}
+   210→   210→   210→   210→        </div>
+   211→   211→   211→   211→      )}
+   212→   212→   212→   212→
+   213→   213→   213→   213→      {/* Empty State */}
+   214→   214→   214→   214→      {!loading && registries.length === 0 && (
+   215→   215→   215→   215→        <Card className="flex flex-col items-center justify-center py-12">
+   216→   216→   216→   216→          <Building2 className="mb-4 h-12 w-12 text-muted-foreground/50" />
+   217→   217→   217→   217→          <h3 className="text-lg font-medium">No registries yet</h3>
+   218→   218→   218→   218→          <p className="mb-4 text-sm text-muted-foreground">
+   219→   219→   219→   219→            Create your first registry to start publishing models.
+   220→   220→   220→   220→          </p>
+   221→   221→   221→   221→          <Button onClick={() => setCreateOpen(true)}>
+   222→   222→   222→   222→            <Plus className="mr-2 h-4 w-4" />
+   223→   223→   223→   223→            Create Registry
+   224→   224→   224→   224→          </Button>
+   225→   225→   225→   225→        </Card>
+   226→   226→   226→   226→      )}
+   227→   227→   227→   227→
+   228→   228→   228→   228→      {/* Registry Cards Grid */}
+   229→   229→   229→   229→      {!loading && registries.length > 0 && (
+   230→   230→   230→   230→        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+   231→   231→   231→   231→          {registries.map((reg) => (
+   232→   232→   232→   232→            <Card
+   233→   233→   233→   233→              key={reg.id}
+   234→   234→   234→   234→              className="cursor-pointer transition-colors hover:border-primary/50 hover:bg-muted/30"
+   235→   235→   235→   235→              onClick={() => navigate('registry-detail', reg.id)}
+   236→   236→   236→   236→            >
+   237→   237→   237→   237→              <CardHeader className="pb-3">
+   238→   238→   238→   238→                <div className="flex items-start justify-between">
+   239→   239→   239→   239→                  <div className="flex items-center gap-2">
+   240→   240→   240→   240→                    <Shield className="h-4 w-4 text-primary" />
+   241→   241→   241→   241→                    <CardTitle className="text-base">{reg.name}</CardTitle>
+   242→   242→   242→   242→                  </div>
+   243→   243→   243→   243→                  <Badge variant="secondary" className="text-xs">
+   244→   244→   244→   244→                    {reg.artifactCount} artifact{reg.artifactCount !== 1 ? 's' : ''}
+   245→   245→   245→   245→                  </Badge>
+   246→   246→   246→   246→                </div>
+   247→   247→   247→   247→                <CardDescription className="mt-1">
+   248→   248→   248→   248→                  {truncate(reg.description || 'No description', 80)}
+   249→   249→   249→   249→                </CardDescription>
+   250→   250→   250→   250→              </CardHeader>
+   251→   251→   251→   251→              <CardContent>
+   252→   252→   252→   252→                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   253→   253→   253→   253→                  <FileCode className="h-3 w-3" />
+   254→   254→   254→   254→                  <span>OPA Policy</span>
+   255→   255→   255→   255→                  <span className="mx-1">·</span>
+   256→   256→   256→   256→                  {reg.lastPublishAt ? (
+   257→   257→   257→   257→                    <span>Published {formatDistanceToNow(new Date(reg.lastPublishAt), { addSuffix: true })}</span>
+   258→   258→   258→   258→                  ) : (
+   259→   259→   259→   259→                    <span>No publications yet</span>
+   260→   260→   260→   260→                  )}
+   261→   261→   261→   261→                </div>
+   262→   262→   262→   262→              </CardContent>
+   263→   263→   263→   263→            </Card>
+   264→   264→   264→   264→          ))}
+   265→   265→   265→   265→        </div>
+   266→   266→   266→   266→      )}
+   267→   267→   267→   267→
+   268→   268→   268→   268→      {/* Create Registry Dialog */}
+   269→   269→   269→   269→      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+   270→   270→   270→   270→        <DialogContent className="max-w-lg">
+   271→   271→   271→   271→          <DialogHeader>
+   272→   272→   272→   272→            <DialogTitle>Create Registry</DialogTitle>
+   273→   273→   273→   273→            <DialogDescription>
+   274→   274→   274→   274→              Set up a new model registry with a publication policy.
+   275→   275→   275→   275→            </DialogDescription>
+   276→   276→   276→   276→          </DialogHeader>
+   277→   277→   277→   277→          <div className="space-y-4 py-2">
+   278→   278→   278→   278→            <div className="space-y-2">
+   279→   279→   279→   279→              <Label htmlFor="reg-name">Registry Name</Label>
+   280→   280→   280→   280→              <Input
+   281→   281→   281→   281→                id="reg-name"
+   282→   282→   282→   282→                placeholder="e.g., Production Registry"
+   283→   283→   283→   283→                value={createForm.name}
+   284→   284→   284→   284→                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+   285→   285→   285→   285→              />
+   286→   286→   286→   286→            </div>
+   287→   287→   287→   287→            <div className="space-y-2">
+   288→   288→   288→   288→              <Label htmlFor="reg-desc">Description</Label>
+   289→   289→   289→   289→              <Textarea
+   290→   290→   290→   290→                id="reg-desc"
+   291→   291→   291→   291→                placeholder="Describe the purpose of this registry..."
+   292→   292→   292→   292→                value={createForm.description}
+   293→   293→   293→   293→                onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
+   294→   294→   294→   294→                rows={3}
+   295→   295→   295→   295→              />
+   296→   296→   296→   296→            </div>
+   297→   297→   297→   297→            <div className="space-y-2">
+   298→   298→   298→   298→              <Label htmlFor="reg-policy">Publication Policy (Rego)</Label>
+   299→   299→   299→   299→              <Textarea
+   300→   300→   300→   300→                id="reg-policy"
+   301→   301→   301→   301→                value={createForm.policyRego}
+   302→   302→   302→   302→                onChange={(e) => setCreateForm((f) => ({ ...f, policyRego: e.target.value }))}
+   303→   303→   303→   303→                rows={10}
+   304→   304→   304→   304→                className="font-mono text-xs"
+   305→   305→   305→   305→                placeholder="Enter OPA Rego policy..."
+   306→   306→   306→   306→              />
+   307→   307→   307→   307→            </div>
+   308→   308→   308→   308→          </div>
+   309→   309→   309→   309→          <DialogFooter>
+   310→   310→   310→   310→            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+   311→   311→   311→   311→              Cancel
+   312→   312→   312→   312→            </Button>
+   313→   313→   313→   313→            <Button onClick={handleCreate} disabled={!createForm.name.trim() || creating}>
+   314→   314→   314→   314→              {creating ? 'Creating...' : 'Create Registry'}
+   315→   315→   315→   315→            </Button>
+   316→   316→   316→   316→          </DialogFooter>
+   317→   317→   317→   317→        </DialogContent>
+   318→   318→   318→   318→      </Dialog>
+   319→   319→   319→   319→    </div>
+   320→   320→   320→   320→  );
+   321→   321→   321→   321→}
+   322→   322→   322→   322→
+   323→   323→   323→   323→// ── Registry Detail ───────────────────────────────────────────────────────────
+   324→   324→   324→   324→
+   325→   325→   325→   325→function RegistryDetail() {
+   326→   326→   326→   326→  const { selectedRegistryId, navigate, user } = useAppStore();
+   327→   327→   327→   327→  const { toast } = useToast();
+   328→   328→   328→   328→  const [registry, setRegistry] = useState<Registry | null>(null);
+   329→   329→   329→   329→  const [loading, setLoading] = useState(true);
+   330→   330→   330→   330→  const [models, setModels] = useState<ModelOption[]>([]);
+   331→   331→   331→   331→  const [modelsLoading, setModelsLoading] = useState(false);
+   332→   332→   332→   332→
+   333→   333→   333→   333→  // Edit policy dialog
+   334→   334→   334→   334→  const [editPolicyOpen, setEditPolicyOpen] = useState(false);
+   335→   335→   335→   335→  const [editPolicy, setEditPolicy] = useState('');
+   336→   336→   336→   336→  const [savingPolicy, setSavingPolicy] = useState(false);
+   337→   337→   337→   337→
+   338→   338→   338→   338→  // Publish dialog
+   339→   339→   339→   339→  const [publishOpen, setPublishOpen] = useState(false);
+   340→   340→   340→   340→  const [selectedModelId, setSelectedModelId] = useState('');
+   341→   341→   341→   341→  const [publishing, setPublishing] = useState(false);
+   342→   342→   342→   342→  const [publishResult, setPublishResult] = useState<{
+   343→   343→   343→   343→    gateResult: string;
+   344→   344→   344→   344→    gateReasons: string;
+   345→   345→   345→   345→  } | null>(null);
+   346→   346→   346→   346→
+   347→   347→   347→   347→  const fetchRegistry = useCallback(async () => {
+   348→   348→   348→   348→    if (!selectedRegistryId) return;
+   349→   349→   349→   349→    try {
+   350→   350→   350→   350→      const res = await fetch(`/api/registries/${selectedRegistryId}`);
+   351→   351→   351→   351→      if (res.ok) {
+   352→   352→   352→   352→        const data = await res.json();
+   353→   353→   353→   353→        setRegistry(data);
+   354→   354→   354→   354→        setEditPolicy(data.policyRego);
+   355→   355→   355→   355→      } else {
+   356→   356→   356→   356→        toast({ title: 'Registry not found', variant: 'destructive' });
+   357→   357→   357→   357→        navigate('registries');
+   358→   358→   358→   358→      }
+   359→   359→   359→   359→    } catch {
+   360→   360→   360→   360→      toast({ title: 'Failed to load registry', variant: 'destructive' });
+   361→   361→   361→   361→    } finally {
+   362→   362→   362→   362→      setLoading(false);
+   363→   363→   363→   363→    }
+   364→   364→   364→   364→  }, [selectedRegistryId, navigate, toast]);
+   365→   365→   365→   365→
+   366→   366→   366→   366→  useEffect(() => {
+   367→   367→   367→   367→    fetchRegistry();
+   368→   368→   368→   368→  }, [fetchRegistry]);
+   369→   369→   369→   369→
+   370→   370→   370→   370→  const openPublishDialog = async () => {
+   371→   371→   371→   371→    setPublishOpen(true);
+   372→   372→   372→   372→    setPublishResult(null);
+   373→   373→   373→   373→    setSelectedModelId('');
+   374→   374→   374→   374→    setModelsLoading(true);
+   375→   375→   375→   375→    try {
+   376→   376→   376→   376→      const res = await fetch('/api/models?limit=100');
+   377→   377→   377→   377→      const data = await res.json();
+   378→   378→   378→   378→      if (data.items) {
+   379→   379→   379→   379→        setModels(
+   380→   380→   380→   380→          data.items.filter(
+   381→   381→   381→   381→            (m: ModelOption) => m.latestVersion !== null
+   382→   382→   382→   382→          )
+   383→   383→   383→   383→        );
+   384→   384→   384→   384→      }
+   385→   385→   385→   385→    } catch {
+   386→   386→   386→   386→      toast({ title: 'Failed to load models', variant: 'destructive' });
+   387→   387→   387→   387→    } finally {
+   388→   388→   388→   388→      setModelsLoading(false);
+   389→   389→   389→   389→    }
+   390→   390→   390→   390→  };
+   391→   391→   391→   391→
+   392→   392→   392→   392→  const handleSavePolicy = async () => {
+   393→   393→   393→   393→    if (!selectedRegistryId) return;
+   394→   394→   394→   394→    setSavingPolicy(true);
+   395→   395→   395→   395→    try {
+   396→   396→   396→   396→      const res = await fetch(`/api/registries/${selectedRegistryId}`, {
+   397→   397→   397→   397→        method: 'PUT',
+   398→   398→   398→   398→        headers: { 'Content-Type': 'application/json' },
+   399→   399→   399→   399→        body: JSON.stringify({ policyRego: editPolicy }),
+   400→   400→   400→   400→      });
+   401→   401→   401→   401→      if (res.ok) {
+   402→   402→   402→   402→        toast({ title: 'Policy updated successfully' });
+   403→   403→   403→   403→        setEditPolicyOpen(false);
+   404→   404→   404→   404→        fetchRegistry();
+   405→   405→   405→   405→      } else {
+   406→   406→   406→   406→        const err = await res.json();
+   407→   407→   407→   407→        toast({ title: err.error || 'Failed to update policy', variant: 'destructive' });
+   408→   408→   408→   408→      }
+   409→   409→   409→   409→    } catch {
+   410→   410→   410→   410→      toast({ title: 'Failed to update policy', variant: 'destructive' });
+   411→   411→   411→   411→    } finally {
+   412→   412→   412→   412→      setSavingPolicy(false);
+   413→   413→   413→   413→    }
+   414→   414→   414→   414→  };
+   415→   415→   415→   415→
+   416→   416→   416→   416→  const handlePublish = async () => {
+   417→   417→   417→   417→    if (!selectedRegistryId || !selectedModelId) return;
+   418→   418→   418→   418→    const model = models.find((m) => m.id === selectedModelId);
+   419→   419→   419→   419→    if (!model || !model.latestVersion) return;
+   420→   420→   420→   420→
+   421→   421→   421→   421→    setPublishing(true);
+   422→   422→   422→   422→    setPublishResult(null);
+   423→   423→   423→   423→    try {
+   424→   424→   424→   424→      const res = await fetch(`/api/registries/${selectedRegistryId}`, {
+   425→   425→   425→   425→        method: 'POST',
+   426→   426→   426→   426→        headers: { 'Content-Type': 'application/json' },
+   427→   427→   427→   427→        body: JSON.stringify({
+   428→   428→   428→   428→          modelId: model.id,
+   429→   429→   429→   429→          versionId: model.latestVersion.id,
+   430→   430→   430→   430→        }),
+   431→   431→   431→   431→      });
+   432→   432→   432→   432→      if (res.ok) {
+   433→   433→   433→   433→        const data = await res.json();
+   434→   434→   434→   434→        setPublishResult({
+   435→   435→   435→   435→          gateResult: data.gateResult,
+   436→   436→   436→   436→          gateReasons: data.gateReasons,
+   437→   437→   437→   437→        });
+   438→   438→   438→   438→        fetchRegistry();
+   439→   439→   439→   439→      } else {
+   440→   440→   440→   440→        const err = await res.json();
+   441→   441→   441→   441→        toast({ title: err.error || 'Failed to publish model', variant: 'destructive' });
+   442→   442→   442→   442→      }
+   443→   443→   443→   443→    } catch {
+   444→   444→   444→   444→      toast({ title: 'Failed to publish model', variant: 'destructive' });
+   445→   445→   445→   445→    } finally {
+   446→   446→   446→   446→      setPublishing(false);
+   447→   447→   447→   447→    }
+   448→   448→   448→   448→  };
+   449→   449→   449→   449→
+   450→   450→   450→   450→  if (loading) {
+   451→   451→   451→   451→    return (
+   452→   452→   452→   452→      <div className="space-y-6">
+   453→   453→   453→   453→        <div className="flex items-center gap-4">
+   454→   454→   454→   454→          <Skeleton className="h-9 w-9" />
+   455→   455→   455→   455→          <Skeleton className="h-8 w-64" />
+   456→   456→   456→   456→        </div>
+   457→   457→   457→   457→        <Skeleton className="h-40 w-full" />
+   458→   458→   458→   458→        <Skeleton className="h-60 w-full" />
+   459→   459→   459→   459→      </div>
+   460→   460→   460→   460→    );
+   461→   461→   461→   461→  }
+   462→   462→   462→   462→
+   463→   463→   463→   463→  if (!registry) return null;
+   464→   464→   464→   464→
+   465→   465→   465→   465→  const isAdmin = user?.role === 'owner' || user?.role === 'admin';
+   466→   466→   466→   466→
+   467→   467→   467→   467→  return (
+   468→   468→   468→   468→    <div className="space-y-6">
+   469→   469→   469→   469→      {/* Back button + Header */}
+   470→   470→   470→   470→      <div className="flex items-center gap-4">
+   471→   471→   471→   471→        <Button variant="ghost" size="icon" onClick={() => navigate('registries')}>
+   472→   472→   472→   472→          <ArrowLeft className="h-5 w-5" />
+   473→   473→   473→   473→        </Button>
+   474→   474→   474→   474→        <div className="flex-1">
+   475→   475→   475→   475→          <div className="flex items-center gap-3">
+   476→   476→   476→   476→            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+   477→   477→   477→   477→              <Building2 className="h-5 w-5 text-primary" />
+   478→   478→   478→   478→            </div>
+   479→   479→   479→   479→            <div>
+   480→   480→   480→   480→              <h1 className="text-2xl font-bold tracking-tight">{registry.name}</h1>
+   481→   481→   481→   481→              <p className="text-sm text-muted-foreground">
+   482→   482→   482→   482→                {registry.description || 'No description'}
+   483→   483→   483→   483→              </p>
+   484→   484→   484→   484→            </div>
+   485→   485→   485→   485→          </div>
+   486→   486→   486→   486→        </div>
+   487→   487→   487→   487→        <Button onClick={openPublishDialog}>
+   488→   488→   488→   488→          <ExternalLink className="mr-2 h-4 w-4" />
+   489→   489→   489→   489→          Publish Model
+   490→   490→   490→   490→        </Button>
+   491→   491→   491→   491→      </div>
+   492→   492→   492→   492→
+   493→   493→   493→   493→      {/* Policy Section */}
+   494→   494→   494→   494→      <Card>
+   495→   495→   495→   495→        <CardHeader className="pb-3">
+   496→   496→   496→   496→          <div className="flex items-center justify-between">
+   497→   497→   497→   497→            <div className="flex items-center gap-2">
+   498→   498→   498→   498→              <Shield className="h-4 w-4 text-primary" />
+   499→   499→   499→   499→              <CardTitle className="text-base">Publication Policy</CardTitle>
+   500→   500→   500→   500→            </div>
+   501→   501→   501→   501→            {isAdmin && (
+   502→   502→   502→   502→              <Button
+   503→   503→   503→   503→                variant="outline"
+   504→   504→   504→   504→                size="sm"
+   505→   505→   505→   505→                onClick={() => {
+   506→   506→   506→   506→                  setEditPolicy(registry.policyRego);
+   507→   507→   507→   507→                  setEditPolicyOpen(true);
+   508→   508→   508→   508→                }}
+   509→   509→   509→   509→              >
+   510→   510→   510→   510→                <Edit className="mr-2 h-3 w-3" />
+   511→   511→   511→   511→                Edit Policy
+   512→   512→   512→   512→              </Button>
+   513→   513→   513→   513→            )}
+   514→   514→   514→   514→          </div>
+   515→   515→   515→   515→        </CardHeader>
+   516→   516→   516→   516→        <CardContent>
+   517→   517→   517→   517→          <pre className="max-h-64 overflow-auto rounded-lg border bg-muted p-4 text-xs text-muted-foreground font-mono custom-scrollbar">
+   518→   518→   518→   518→            <code>{registry.policyRego}</code>
+   519→   519→   519→   519→          </pre>
+   520→   520→   520→   520→        </CardContent>
+   521→   521→   521→   521→      </Card>
+   522→   522→   522→   522→
+   523→   523→   523→   523→      {/* Artifacts Table */}
+   524→   524→   524→   524→      <Card>
+   525→   525→   525→   525→        <CardHeader className="pb-3">
+   526→   526→   526→   526→          <div className="flex items-center justify-between">
+   527→   527→   527→   527→            <div className="flex items-center gap-2">
+   528→   528→   528→   528→              <FileCode className="h-4 w-4 text-primary" />
+   529→   529→   529→   529→              <CardTitle className="text-base">Published Artifacts</CardTitle>
+   530→   530→   530→   530→              <Badge variant="secondary">{registry.artifacts.length}</Badge>
+   531→   531→   531→   531→            </div>
+   532→   532→   532→   532→          </div>
+   533→   533→   533→   533→        </CardHeader>
+   534→   534→   534→   534→        <CardContent>
+   535→   535→   535→   535→          {registry.artifacts.length === 0 ? (
+   536→   536→   536→   536→            <div className="flex flex-col items-center justify-center py-8 text-center">
+   537→   537→   537→   537→              <FileCode className="mb-3 h-8 w-8 text-muted-foreground/50" />
+   538→   538→   538→   538→              <p className="text-sm text-muted-foreground">No artifacts published yet.</p>
+   539→   539→   539→   539→              <Button variant="outline" size="sm" className="mt-3" onClick={openPublishDialog}>
+   540→   540→   540→   540→                <Plus className="mr-2 h-3 w-3" />
+   541→   541→   541→   541→                Publish your first model
+   542→   542→   542→   542→              </Button>
+   543→   543→   543→   543→            </div>
+   544→   544→   544→   544→          ) : (
+   545→   545→   545→   545→            <div className="overflow-x-auto">
+   546→   546→   546→   546→              <Table>
+   547→   547→   547→   547→                <TableHeader>
+   548→   548→   548→   548→                  <TableRow>
+   549→   549→   549→   549→                    <TableHead>Model</TableHead>
+   550→   550→   550→   550→                    <TableHead>Version</TableHead>
+   551→   551→   551→   551→                    <TableHead>Published</TableHead>
+   552→   552→   552→   552→                    <TableHead>Gate Result</TableHead>
+   553→   553→   553→   553→                  </TableRow>
+   554→   554→   554→   554→                </TableHeader>
+   555→   555→   555→   555→                <TableBody>
+   556→   556→   556→   556→                  {registry.artifacts.map((art) => (
+   557→   557→   557→   557→                    <TableRow key={art.id}>
+   558→   558→   558→   558→                      <TableCell className="font-medium">
+   559→   559→   559→   559→                        <div className="flex items-center gap-2">
+   560→   560→   560→   560→                          {art.model.name}
+   561→   561→   561→   561→                          <Badge variant="outline" className="text-xs">
+   562→   562→   562→   562→                            {art.model.format}
+   563→   563→   563→   563→                          </Badge>
+   564→   564→   564→   564→                        </div>
+   565→   565→   565→   565→                      </TableCell>
+   566→   566→   566→   566→                      <TableCell className="font-mono text-xs text-muted-foreground">
+   567→   567→   567→   567→                        {art.versionId.slice(0, 8)}...
+   568→   568→   568→   568→                      </TableCell>
+   569→   569→   569→   569→                      <TableCell className="text-sm text-muted-foreground">
+   570→   570→   570→   570→                        {formatDistanceToNow(new Date(art.publishedAt), { addSuffix: true })}
+   571→   571→   571→   571→                      </TableCell>
+   572→   572→   572→   572→                      <TableCell>
+   573→   573→   573→   573→                        {art.gateResult === 'ALLOWED' ? (
+   574→   574→   574→   574→                          <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20">
+   575→   575→   575→   575→                            <Check className="mr-1 h-3 w-3" />
+   576→   576→   576→   576→                            ALLOWED
+   577→   577→   577→   577→                          </Badge>
+   578→   578→   578→   578→                        ) : (
+   579→   579→   579→   579→                          <Badge variant="destructive">
+   580→   580→   580→   580→                            <XCircle className="mr-1 h-3 w-3" />
+   581→   581→   581→   581→                            BLOCKED
+   582→   582→   582→   582→                          </Badge>
+   583→   583→   583→   583→                        )}
+   584→   584→   584→   584→                      </TableCell>
+   585→   585→   585→   585→                    </TableRow>
+   586→   586→   586→   586→                  ))}
+   587→   587→   587→   587→                </TableBody>
+   588→   588→   588→   588→              </Table>
+   589→   589→   589→   589→            </div>
+   590→   590→   590→   590→          )}
+   591→   591→   591→   591→        </CardContent>
+   592→   592→   592→   592→      </Card>
+   593→   593→   593→   593→
+   594→   594→   594→   594→      {/* Edit Policy Dialog */}
+   595→   595→   595→   595→      <Dialog open={editPolicyOpen} onOpenChange={setEditPolicyOpen}>
+   596→   596→   596→   596→        <DialogContent className="max-w-2xl">
+   597→   597→   597→   597→          <DialogHeader>
+   598→   598→   598→   598→            <DialogTitle>Edit Publication Policy</DialogTitle>
+   599→   599→   599→   599→            <DialogDescription>
+   600→   600→   600→   600→              Modify the OPA Rego policy that controls which models can be published.
+
+[showing lines 1-600 of 602; use offset=601 with limit to continue reading]

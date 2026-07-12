@@ -1,0 +1,870 @@
+     1→import { PrismaClient } from '@prisma/client';
+     2→
+     3→const prisma = new PrismaClient();
+     4→
+     5→// ── helpers ──────────────────────────────────────────────────────────────────
+     6→const ago = (ms: number) => new Date(Date.now() - ms);
+     7→const DAY = 86_400_000;
+     8→const HOUR = 3_600_000;
+     9→const MIN = 60_000;
+    10→
+    11→// Realistic-looking fake SHA-256 hashes
+    12→const fakeSha256 = (seed: number) =>
+    13→  'a'.repeat(8) +
+    14→  seed.toString(16).padStart(2, '0') +
+    15→  'b'.repeat(8) +
+    16→  (seed * 7).toString(16).padStart(4, '0') +
+    17→  'c'.repeat(8) +
+    18→  (seed * 13).toString(16).padStart(4, '0') +
+    19→  'd'.repeat(8) +
+    20→  (seed * 3).toString(16).padStart(4, '0') +
+    21→  'e'.repeat(8) +
+    22→  (seed * 11).toString(16).padStart(4, '0') +
+    23→  'f'.repeat(16);
+    24→
+    25→const padHex = (n: number, len: number) => n.toString(16).padStart(len, '0');
+    26→
+    27→const sha256 = (seed: number) => {
+    28→  // Produce a deterministic 64-char hex string
+    29→  const s = padHex(seed, 64);
+    30→  return (
+    31→    'a3f7b2c1e9d40856f6a3b7c9d2e1f4a8b5c7d9e1f3a6b8c0d2e4f7a9b1c3d5e' +
+    32→    s
+    33→  ).slice(0, 64);
+    34→};
+    35→
+    36→// ── CycloneDX ML-BOM template ───────────────────────────────────────────────
+    37→function makeSbomJson(modelName: string, version: string, totalDeps: number) {
+    38→  const deps = Array.from({ length: Math.min(totalDeps, 8) }, (_, i) => ({
+    39→    ref: `pkg:pypi/${['numpy', 'torch', 'transformers', 'tokenizers', 'safetensors', 'onnx', 'pillow', 'scipy'][i % 8]}@${[
+    40→      '1.24.3',
+    41→      '2.1.2',
+    42→      '4.36.0',
+    43→      '0.15.0',
+    44→      '0.4.1',
+    45→      '1.15.0',
+    46→      '10.2.0',
+    47→      '1.11.4',
+    48→    ][i % 8]}`,
+    49→    type: 'library',
+    50→  }));
+    51→
+    52→  return JSON.stringify({
+    53→    bomFormat: 'CycloneDX',
+    54→    specVersion: '1.5',
+    55→    metadata: {
+    56→      component: {
+    57→        name: modelName,
+    58→        version: version,
+    59→        type: 'machine-learning-model',
+    60→        properties: [
+    61→          { name: 'ml:framework', value: 'pytorch' },
+    62→          { name: 'ml:task', value: 'text-generation' },
+    63→          { name: 'ml:parameters', value: '7000000000' },
+    64→        ],
+    65→      },
+    66→      tools: [{ name: 'modelvault-scanner', version: '1.2.0' }],
+    67→    },
+    68→    components: deps,
+    69→    dependencies: [{ ref: `model://${modelName}@${version}`, dependsOn: deps.map((d) => d.ref) }],
+    70→  });
+    71→}
+    72→
+    73→// ── Sandbox config template ─────────────────────────────────────────────────
+    74→function makeSandboxConfig() {
+    75→  return JSON.stringify({
+    76→    image: 'modelvault/sandbox:latest',
+    77→    timeoutSeconds: 300,
+    78→    networkPolicy: 'deny-egress',
+    79→    allowedDomains: [],
+    80→    resourceLimits: { cpu: '2', memory: '4Gi' },
+    81→    probes: ['network-egress', 'dns-resolution', 'filesystem-write', 'process-spawn'],
+    82→  });
+    83→}
+    84→
+    85→// ── Sandbox result template ─────────────────────────────────────────────────
+    86→function makeSandboxResult(status: 'passed' | 'failed' | 'warning') {
+    87→  const results = {
+    88→    passed: {
+    89→      verdict: 'PASSED',
+    90→      findings: [
+    91→        { probe: 'network-egress', result: 'ok', detail: 'No outbound connections attempted' },
+    92→        { probe: 'dns-resolution', result: 'ok', detail: 'No DNS queries observed' },
+    93→        { probe: 'filesystem-write', result: 'ok', detail: 'No unexpected file writes' },
+    94→        { probe: 'process-spawn', result: 'ok', detail: 'No suspicious process creation' },
+    95→      ],
+    96→    },
+    97→    warning: {
+    98→      verdict: 'WARNING',
+    99→      findings: [
+   100→        { probe: 'network-egress', result: 'ok', detail: 'No outbound connections attempted' },
+   101→        { probe: 'dns-resolution', result: 'ok', detail: 'No DNS queries observed' },
+   102→        { probe: 'filesystem-write', result: 'warning', detail: 'Model wrote to /tmp/cache (expected)' },
+   103→        { probe: 'process-spawn', result: 'ok', detail: 'No suspicious process creation' },
+   104→      ],
+   105→    },
+   106→    failed: {
+   107→      verdict: 'FAILED',
+   108→      findings: [
+   109→        { probe: 'network-egress', result: 'failed', detail: 'Outbound connection to 203.0.113.42:443 detected' },
+   110→        { probe: 'dns-resolution', result: 'failed', detail: 'DNS query for suspicious-domain.xyz observed' },
+   111→        { probe: 'filesystem-write', result: 'ok', detail: 'No unexpected file writes' },
+   112→        { probe: 'process-spawn', result: 'ok', detail: 'No suspicious process creation' },
+   113→      ],
+   114→    },
+   115→  };
+   116→  return JSON.stringify(results[status], null, 2);
+   117→}
+   118→
+   119→// ── OPA Rego policy templates ───────────────────────────────────────────────
+   120→const productionPolicy = `package modelvault.policy.production
+   121→
+   122→import future.keywords.if
+   123→import future.keywords.in
+   124→
+   125→default allow := false
+   126→
+   127→# Require cryptographic signature
+   128→allow if {
+   129→    input.model.signature != null
+   130→}
+   131→
+   132→# No CRITICAL sandbox findings
+   133→allow if {
+   134→    not has_critical_sandbox_finding
+   135→}
+   136→
+   137→# No CRITICAL SBOM vulnerabilities
+   138→allow if {
+   139→    not has_critical_sbom_vuln
+   140→}
+   141→
+   142→has_critical_sandbox_finding if {
+   143→    some finding in input.sandbox.findings
+   144→    finding.severity == "CRITICAL"
+   145→}
+   146→
+   147→has_critical_sbom_vuln if {
+   148→    input.sbom.criticalCount > 0
+   149→}
+   150→
+   151→# Deny reason generation
+   152→deny_reasons[msg] if {
+   153→    input.model.signature == null
+   154→    msg := "Model must be cryptographically signed before publishing to production"
+   155→}
+   156→
+   157→deny_reasons[msg] if {
+   158→    has_critical_sandbox_finding
+   159→    msg := "Model has CRITICAL sandbox behavioral findings"
+   160→}
+   161→
+   162→deny_reasons[msg] if {
+   163→    has_critical_sbom_vuln
+   164→    msg := sprintf("Model has %d CRITICAL SBOM vulnerabilities", [input.sbom.criticalCount])
+   165→}`;
+   166→
+   167→const stagingPolicy = `package modelvault.policy.staging
+   168→
+   169→import future.keywords.if
+   170→
+   171→# Staging is more relaxed – allow everything except quarantined models
+   172→default allow := false
+   173→
+   174→allow if {
+   175→    input.model.status != "quarantined"
+   176→    input.model.status != "failed"
+   177→}`;
+   178→
+   179→// ── Main seed ───────────────────────────────────────────────────────────────
+   180→async function main() {
+   181→  console.log('🌱 Seeding ModelVault database...\n');
+   182→
+   183→  // Clean up existing data (order matters for FK constraints)
+   184→  await prisma.auditLog.deleteMany();
+   185→  await prisma.registryArtifact.deleteMany();
+   186→  await prisma.registry.deleteMany();
+   187→  await prisma.apiKey.deleteMany();
+   188→  await prisma.sandboxJob.deleteMany();
+   189→  await prisma.signature.deleteMany();
+   190→  await prisma.sbom.deleteMany();
+   191→  await prisma.modelVersion.deleteMany();
+   192→  await prisma.model.deleteMany();
+   193→  await prisma.orgMember.deleteMany();
+   194→  await prisma.user.deleteMany();
+   195→  await prisma.organization.deleteMany();
+   196→
+   197→  // ── 1. Users (created first so we can reference them as owners) ──────────
+   198→  console.log('  Creating users...');
+   199→  const users = await prisma.$transaction([
+   200→    prisma.user.create({
+   201→      data: {
+   202→        email: 'sarah@acme-ai.dev',
+   203→        name: 'Sarah Chen',
+   204→        passwordHash: '$2b$10$demo_hash_for_sarah_chen',
+   205→        avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=SC',
+   206→        mfaEnabled: true,
+   207→        lastLoginAt: ago(2 * HOUR),
+   208→        createdAt: ago(60 * DAY),
+   209→      },
+   210→    }),
+   211→    prisma.user.create({
+   212→      data: {
+   213→        email: 'marcus@acme-ai.dev',
+   214→        name: 'Marcus Rivera',
+   215→        passwordHash: '$2b$10$demo_hash_for_marcus_rivera',
+   216→        avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=MR',
+   217→        lastLoginAt: ago(30 * MIN),
+   218→        createdAt: ago(55 * DAY),
+   219→      },
+   220→    }),
+   221→    prisma.user.create({
+   222→      data: {
+   223→        email: 'priya@acme-ai.dev',
+   224→        name: 'Priya Patel',
+   225→        passwordHash: '$2b$10$demo_hash_for_priya_patel',
+   226→        avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=PP',
+   227→        lastLoginAt: ago(1 * DAY),
+   228→        createdAt: ago(30 * DAY),
+   229→      },
+   230→    }),
+   231→    prisma.user.create({
+   232→      data: {
+   233→        email: 'james@neuralsec.dev',
+   234→        name: 'James Wilson',
+   235→        passwordHash: '$2b$10$demo_hash_for_james_wilson',
+   236→        avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=JW',
+   237→        mfaEnabled: true,
+   238→        lastLoginAt: ago(15 * MIN),
+   239→        createdAt: ago(45 * DAY),
+   240→      },
+   241→    }),
+   242→    prisma.user.create({
+   243→      data: {
+   244→        email: 'lisa@neuralsec.dev',
+   245→        name: 'Lisa Zhang',
+   246→        passwordHash: '$2b$10$demo_hash_for_lisa_zhang',
+   247→        avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=LZ',
+   248→        lastLoginAt: ago(3 * HOUR),
+   249→        createdAt: ago(20 * DAY),
+   250→      },
+   251→    }),
+   252→  ]);
+   253→
+   254→  const [sarah, marcus, priya, james, lisa] = users;
+   255→  console.log(`    ✓ ${users.length} users created`);
+   256→
+   257→  // ── 2. Organizations ─────────────────────────────────────────────────────
+   258→  console.log('  Creating organizations...');
+   259→  const [acme, neuralsec] = await prisma.$transaction([
+   260→    prisma.organization.create({
+   261→      data: {
+   262→        name: 'Acme AI Labs',
+   263→        slug: 'acme-ai-labs',
+   264→        ownerId: sarah.id,
+   265→        plan: 'pro',
+   266→        storageUsedBytes: 1_800_000_000,
+   267→        storageQuotaBytes: 2_000_000_000,
+   268→        maxMembers: 25,
+   269→        createdAt: ago(60 * DAY),
+   270→      },
+   271→    }),
+   272→    prisma.organization.create({
+   273→      data: {
+   274→        name: 'NeuralSec Corp',
+   275→        slug: 'neuralsec-corp',
+   276→        ownerId: james.id,
+   277→        plan: 'enterprise',
+   278→        storageUsedBytes: 1_900_000_000,
+   279→        storageQuotaBytes: 2_000_000_000,
+   280→        maxMembers: 100,
+   281→        createdAt: ago(45 * DAY),
+   282→      },
+   283→    }),
+   284→  ]);
+   285→  console.log(`    ✓ Acme AI Labs (${acme.id})`);
+   286→  console.log(`    ✓ NeuralSec Corp (${neuralsec.id})`);
+   287→
+   288→  // ── 3. Org Members ───────────────────────────────────────────────────────
+   289→  console.log('  Creating org memberships...');
+   290→  const members = await prisma.$transaction([
+   291→    prisma.orgMember.create({
+   292→      data: {
+   293→        orgId: acme.id,
+   294→        userId: sarah.id,
+   295→        role: 'owner',
+   296→        invitedBy: sarah.id,
+   297→        acceptedAt: ago(60 * DAY),
+   298→        createdAt: ago(60 * DAY),
+   299→      },
+   300→    }),
+   301→    prisma.orgMember.create({
+   302→      data: {
+   303→        orgId: acme.id,
+   304→        userId: marcus.id,
+   305→        role: 'admin',
+   306→        invitedBy: sarah.id,
+   307→        acceptedAt: ago(54 * DAY),
+   308→        createdAt: ago(55 * DAY),
+   309→      },
+   310→    }),
+   311→    prisma.orgMember.create({
+   312→      data: {
+   313→        orgId: acme.id,
+   314→        userId: priya.id,
+   315→        role: 'developer',
+   316→        invitedBy: marcus.id,
+   317→        acceptedAt: ago(29 * DAY),
+   318→        createdAt: ago(30 * DAY),
+   319→      },
+   320→    }),
+   321→    prisma.orgMember.create({
+   322→      data: {
+   323→        orgId: neuralsec.id,
+   324→        userId: james.id,
+   325→        role: 'owner',
+   326→        invitedBy: james.id,
+   327→        acceptedAt: ago(45 * DAY),
+   328→        createdAt: ago(45 * DAY),
+   329→      },
+   330→    }),
+   331→    prisma.orgMember.create({
+   332→      data: {
+   333→        orgId: neuralsec.id,
+   334→        userId: lisa.id,
+   335→        role: 'developer',
+   336→        invitedBy: james.id,
+   337→        acceptedAt: ago(19 * DAY),
+   338→        createdAt: ago(20 * DAY),
+   339→      },
+   340→    }),
+   341→  ]);
+   342→  console.log(`    ✓ ${members.length} memberships created`);
+   343→
+   344→  // ── 4. Models (Acme org) ─────────────────────────────────────────────────
+   345→  console.log('  Creating models...');
+   346→  const modelDefs = [
+   347→    {
+   348→      name: 'GPT-NeoX-7B',
+   349→      description: 'Open-source autoregressive language model with 7 billion parameters by EleutherAI. Suitable for research and commercial use.',
+   350→      format: 'safetensors',
+   351→      status: 'signed',
+   352→      sourceUrl: 'https://huggingface.co/EleutherAI/gpt-neox-7b',
+   353→      createdById: sarah.id,
+   354→      createdAt: ago(50 * DAY),
+   355→    },
+   356→    {
+   357→      name: 'Llama-3-8B-Instruct',
+   358→      description: 'Meta\'s instruction-tuned 8B parameter model optimized for dialogue and task completion.',
+   359→      format: 'safetensors',
+   360→      status: 'published',
+   361→      sourceUrl: 'https://huggingface.co/meta-llama/Llama-3-8B-Instruct',
+   362→      createdById: marcus.id,
+   363→      createdAt: ago(40 * DAY),
+   364→    },
+   365→    {
+   366→      name: 'Whisper-Large-v3',
+   367→      description: 'OpenAI\'s robust speech recognition model supporting 99 languages with transcription and translation capabilities.',
+   368→      format: 'pytorch',
+   369→      status: 'scanning',
+   370→      sourceUrl: null,
+   371→      createdById: priya.id,
+   372→      createdAt: ago(5 * DAY),
+   373→    },
+   374→    {
+   375→      name: 'Stable-Diffusion-XL',
+   376→      description: 'Latent diffusion model for high-quality image generation at 1024x1024 resolution.',
+   377→      format: 'safetensors',
+   378→      status: 'signed',
+   379→      sourceUrl: null,
+   380→      createdById: sarah.id,
+   381→      createdAt: ago(35 * DAY),
+   382→    },
+   383→    {
+   384→      name: 'CodeLlama-13B',
+   385→      description: 'Code-specialized LLM built on Llama 2 architecture. Failed SBOM scan – contains known vulnerable dependency.',
+   386→      format: 'gguf',
+   387→      status: 'failed',
+   388→      sourceUrl: null,
+   389→      createdById: marcus.id,
+   390→      createdAt: ago(25 * DAY),
+   391→    },
+   392→    {
+   393→      name: 'BERT-Base-Uncased',
+   394→      description: 'Quarantined ONNX model – sandbox analysis detected unexpected network egress attempt during behavioral testing.',
+   395→      format: 'onnx',
+   396→      status: 'quarantined',
+   397→      sourceUrl: null,
+   398→      createdById: priya.id,
+   399→      createdAt: ago(15 * DAY),
+   400→    },
+   401→  ];
+   402→
+   403→  const models = await prisma.$transaction(
+   404→    modelDefs.map((m) =>
+   405→      prisma.model.create({
+   406→        data: {
+   407→          orgId: acme.id,
+   408→          name: m.name,
+   409→          description: m.description,
+   410→          sourceUrl: m.sourceUrl,
+   411→          format: m.format,
+   412→          status: m.status,
+   413→          createdById: m.createdById,
+   414→          createdAt: m.createdAt,
+   415→        },
+   416→      })
+   417→    )
+   418→  );
+   419→  console.log(`    ✓ ${models.length} models created`);
+   420→
+   421→  const [gptNeox, llama3, whisper, sdxl, codellama, bert] = models;
+   422→
+   423→  // ── 5. Model Versions ────────────────────────────────────────────────────
+   424→  console.log('  Creating model versions...');
+   425→  const versionDefs = [
+   426→    // GPT-NeoX-7B
+   427→    { modelIdx: 0, version: '1.0.0', fileSizeBytes: 1_450_000_000, scanStatus: 'passed', seed: 1, uploadedAt: ago(50 * DAY) },
+   428→    { modelIdx: 0, version: '1.1.0', fileSizeBytes: 1_420_000_000, scanStatus: 'passed', seed: 2, uploadedAt: ago(30 * DAY) },
+   429→    // Llama-3-8B-Instruct
+   430→    { modelIdx: 1, version: '1.0.0', fileSizeBytes: 1_500_000_000, scanStatus: 'passed', seed: 3, uploadedAt: ago(40 * DAY) },
+   431→    { modelIdx: 1, version: '1.1.0', fileSizeBytes: 1_480_000_000, scanStatus: 'passed', seed: 4, uploadedAt: ago(18 * DAY) },
+   432→    // Whisper-Large-v3
+   433→    { modelIdx: 2, version: '1.0.0', fileSizeBytes: 950_000_000, scanStatus: 'pending', seed: 5, uploadedAt: ago(5 * DAY) },
+   434→    { modelIdx: 2, version: '1.1.0-beta', fileSizeBytes: 955_000_000, scanStatus: 'warning', seed: 6, uploadedAt: ago(2 * DAY) },
+   435→    // Stable-Diffusion-XL
+   436→    { modelIdx: 3, version: '1.0.0', fileSizeBytes: 690_000_000, scanStatus: 'passed', seed: 7, uploadedAt: ago(35 * DAY) },
+   437→    { modelIdx: 3, version: '1.1.0', fileSizeBytes: 680_000_000, scanStatus: 'passed', seed: 8, uploadedAt: ago(20 * DAY) },
+   438→    // CodeLlama-13B
+   439→    { modelIdx: 4, version: '1.0.0', fileSizeBytes: 720_000_000, scanStatus: 'failed', seed: 9, uploadedAt: ago(25 * DAY) },
+   440→    { modelIdx: 4, version: '1.0.1-hotfix', fileSizeBytes: 725_000_000, scanStatus: 'failed', seed: 10, uploadedAt: ago(10 * DAY) },
+   441→    // BERT-Base-Uncased
+   442→    { modelIdx: 5, version: '1.0.0', fileSizeBytes: 420_000_000, scanStatus: 'failed', seed: 11, uploadedAt: ago(15 * DAY) },
+   443→    { modelIdx: 5, version: '1.0.1', fileSizeBytes: 425_000_000, scanStatus: 'warning', seed: 12, uploadedAt: ago(8 * DAY) },
+   444→  ];
+   445→
+   446→  const versions = await prisma.$transaction(
+   447→    versionDefs.map((v) =>
+   448→      prisma.modelVersion.create({
+   449→        data: {
+   450→          modelId: models[v.modelIdx].id,
+   451→          version: v.version,
+   452→          fileSizeBytes: v.fileSizeBytes,
+   453→          sha256Hash: sha256(v.seed),
+   454→          sha512Hash: sha256(v.seed) + sha256(v.seed + 100),
+   455→          merkleRoot: sha256(v.seed + 200),
+   456→          scanStatus: v.scanStatus,
+   457→          uploadedAt: v.uploadedAt,
+   458→        },
+   459→      })
+   460→    )
+   461→  );
+   462→  console.log(`    ✓ ${versions.length} model versions created`);
+   463→
+   464→  // ── 6. SBOMs ─────────────────────────────────────────────────────────────
+   465→  console.log('  Creating SBOMs...');
+   466→  const sbomDefs = [
+   467→    { versionIdx: 0, totalDeps: 47, critical: 0, high: 2, medium: 8, low: 15 },
+   468→    { versionIdx: 1, totalDeps: 45, critical: 0, high: 1, medium: 6, low: 12 },
+   469→    { versionIdx: 2, totalDeps: 52, critical: 0, high: 0, medium: 5, low: 10 },
+   470→    { versionIdx: 3, totalDeps: 50, critical: 0, high: 0, medium: 4, low: 9 },
+   471→    { versionIdx: 4, totalDeps: 38, critical: 0, high: 1, medium: 3, low: 7 },
+   472→    { versionIdx: 5, totalDeps: 39, critical: 0, high: 2, medium: 4, low: 8 },
+   473→    { versionIdx: 6, totalDeps: 63, critical: 0, high: 3, medium: 11, low: 20 },
+   474→    { versionIdx: 7, totalDeps: 60, critical: 0, high: 2, medium: 9, low: 18 },
+   475→    { versionIdx: 8, totalDeps: 44, critical: 3, high: 7, medium: 14, low: 22 },
+   476→    { versionIdx: 9, totalDeps: 46, critical: 2, high: 5, medium: 12, low: 19 },
+   477→    { versionIdx: 10, totalDeps: 28, critical: 1, high: 4, medium: 9, low: 13 },
+   478→    { versionIdx: 11, totalDeps: 30, critical: 0, high: 2, medium: 7, low: 11 },
+   479→  ];
+   480→
+   481→  const sboms = await prisma.$transaction(
+   482→    sbomDefs.map((s) => {
+   483→      const version = versions[s.versionIdx];
+   484→      const model = models.find((m) => m.id === version.modelId)!;
+   485→      return prisma.sbom.create({
+   486→        data: {
+   487→          modelId: model.id,
+   488→          versionId: version.id,
+   489→          format: 'cyclonedx-ml-bom',
+   490→          contentJson: makeSbomJson(model.name, version.version, s.totalDeps),
+   491→          totalDeps: s.totalDeps,
+   492→          criticalCount: s.critical,
+   493→          highCount: s.high,
+   494→          mediumCount: s.medium,
+   495→          lowCount: s.low,
+   496→          createdAt: version.uploadedAt,
+   497→        },
+   498→      });
+   499→    })
+   500→  );
+   501→  console.log(`    ✓ ${sboms.length} SBOMs created`);
+   502→
+   503→  // Link SBOMs to versions
+   504→  await prisma.$transaction(
+   505→    sbomDefs.map((s) =>
+   506→      prisma.modelVersion.update({
+   507→        where: { id: versions[s.versionIdx].id },
+   508→        data: { sbomId: sboms[sbomDefs.indexOf(s)].id },
+   509→      })
+   510→    )
+   511→  );
+   512→
+   513→  // ── 7. Signatures ────────────────────────────────────────────────────────
+   514→  console.log('  Creating signatures...');
+   515→  // Signatures for: GPT-NeoX v1.0.0, GPT-NeoX v1.1.0, Llama-3 v1.0.0, Llama-3 v1.1.0, SDXL v1.1.0
+   516→  const signatureDefs = [
+   517→    { versionIdx: 0, signerId: sarah.id, createdAt: ago(49 * DAY) },
+   518→    { versionIdx: 1, signerId: sarah.id, createdAt: ago(29 * DAY) },
+   519→    { versionIdx: 2, signerId: marcus.id, createdAt: ago(39 * DAY) },
+   520→    { versionIdx: 3, signerId: marcus.id, createdAt: ago(17 * DAY) },
+   521→    { versionIdx: 7, signerId: sarah.id, createdAt: ago(19 * DAY) },
+   522→  ];
+   523→
+   524→  const signatures = await prisma.$transaction(
+   525→    signatureDefs.map((s) => {
+   526→      const version = versions[s.versionIdx];
+   527→      const model = models.find((m) => m.id === version.modelId)!;
+   528→      const signer = users.find((u) => u.id === s.signerId)!;
+   529→      return prisma.signature.create({
+   530→        data: {
+   531→          modelId: model.id,
+   532→          versionId: version.id,
+   533→          signerId: s.signerId,
+   534→          signerEmail: signer.email,
+   535→          signerIdentity: `did:web:modelvault.dev:${signer.email.split('@')[0]}`,
+   536→          signatureValue:
+   537→            'MEUCIQD' +
+   538→            sha256(s.versionIdx + 50).slice(0, 56) +
+   539→            'Ig==' +
+   540→            sha256(s.versionIdx + 60).slice(0, 60),
+   541→          certificatePem: `-----BEGIN CERTIFICATE-----\nMIIBkTCB+wIJAK${sha256(s.versionIdx + 70).slice(0, 10)}MA0GCSqGSIb3DQEBCwUA\nMBExDzANBgNVBAMMBnNpZ25lcjAeFw0yNDAxMDEwMDAwMDBaFw0yNTAxMDEwMDAw\nMDBaMBExDzANBgNVBAMMBnNpZ25lcjCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkC\ngYEA${sha256(s.versionIdx + 80).slice(0, 64)}IDAQAB\nAoGBAN${sha256(s.versionIdx + 90).slice(0, 64)}ECgYEA\n${sha256(s.versionIdx + 100).slice(0, 64)}ECgYEA\n${sha256(s.versionIdx + 110).slice(0, 64)}ECgYE\nA${sha256(s.versionIdx + 120).slice(0, 62)}=\n-----END CERTIFICATE-----`,
+   542→          verifiedAt: s.createdAt,
+   543→          createdAt: s.createdAt,
+   544→        },
+   545→      });
+   546→    })
+   547→  );
+   548→  console.log(`    ✓ ${signatures.length} signatures created`);
+   549→
+   550→  // Link signatures to versions
+   551→  await prisma.$transaction(
+   552→    signatureDefs.map((s, i) =>
+   553→      prisma.modelVersion.update({
+   554→        where: { id: versions[s.versionIdx].id },
+   555→        data: { signatureId: signatures[i].id },
+   556→      })
+   557→    )
+   558→  );
+   559→
+   560→  // ── 8. Update model latestVersionId ─────────────────────────────────────
+   561→  console.log('  Setting latest versions...');
+   562→  await prisma.$transaction([
+   563→    prisma.model.update({ where: { id: gptNeox.id }, data: { latestVersionId: versions[1].id } }),
+   564→    prisma.model.update({ where: { id: llama3.id }, data: { latestVersionId: versions[3].id } }),
+   565→    prisma.model.update({ where: { id: whisper.id }, data: { latestVersionId: versions[5].id } }),
+   566→    prisma.model.update({ where: { id: sdxl.id }, data: { latestVersionId: versions[7].id } }),
+   567→    prisma.model.update({ where: { id: codellama.id }, data: { latestVersionId: versions[9].id } }),
+   568→    prisma.model.update({ where: { id: bert.id }, data: { latestVersionId: versions[11].id } }),
+   569→  ]);
+   570→
+   571→  // ── 9. Sandbox Jobs ──────────────────────────────────────────────────────
+   572→  console.log('  Creating sandbox jobs...');
+   573→  const sandboxDefs = [
+   574→    // GPT-NeoX v1.1.0 – completed, passed
+   575→    {
+   576→      modelId: gptNeox.id,
+   577→      versionId: versions[1].id,
+   578→      status: 'completed',
+   579→      submittedBy: sarah.id,
+   580→      configJson: makeSandboxConfig(),
+   581→      resultJson: makeSandboxResult('passed'),
+   582→      startedAt: ago(29 * DAY + 23 * HOUR),
+   583→      completedAt: ago(29 * DAY + 22 * HOUR),
+   584→      durationMs: 3_600_000,
+   585→      createdAt: ago(29 * DAY + 23 * HOUR + 5 * MIN),
+   586→    },
+   587→    // Llama-3 v1.1.0 – completed, passed
+   588→    {
+   589→      modelId: llama3.id,
+   590→      versionId: versions[3].id,
+   591→      status: 'completed',
+   592→      submittedBy: marcus.id,
+   593→      configJson: makeSandboxConfig(),
+   594→      resultJson: makeSandboxResult('passed'),
+   595→      startedAt: ago(17 * DAY + 14 * HOUR),
+   596→      completedAt: ago(17 * DAY + 13 * HOUR),
+   597→      durationMs: 3_800_000,
+   598→      createdAt: ago(17 * DAY + 14 * HOUR + 10 * MIN),
+   599→    },
+   600→    // SDXL v1.1.0 – completed, warning
+   601→    {
+   602→      modelId: sdxl.id,
+   603→      versionId: versions[7].id,
+   604→      status: 'completed',
+   605→      submittedBy: sarah.id,
+   606→      configJson: makeSandboxConfig(),
+   607→      resultJson: makeSandboxResult('warning'),
+   608→      startedAt: ago(19 * DAY + 10 * HOUR),
+   609→      completedAt: ago(19 * DAY + 9 * HOUR),
+   610→      durationMs: 4_200_000,
+   611→      createdAt: ago(19 * DAY + 10 * HOUR + 3 * MIN),
+   612→    },
+   613→    // BERT v1.0.0 – completed, FAILED (led to quarantine)
+   614→    {
+   615→      modelId: bert.id,
+   616→      versionId: versions[10].id,
+   617→      status: 'completed',
+   618→      submittedBy: priya.id,
+   619→      configJson: makeSandboxConfig(),
+   620→      resultJson: makeSandboxResult('failed'),
+   621→      startedAt: ago(14 * DAY + 8 * HOUR),
+   622→      completedAt: ago(14 * DAY + 7 * HOUR),
+   623→      durationMs: 5_100_000,
+   624→      createdAt: ago(14 * DAY + 8 * HOUR + 2 * MIN),
+   625→    },
+   626→    // Whisper v1.1.0-beta – running
+   627→    {
+   628→      modelId: whisper.id,
+   629→      versionId: versions[5].id,
+   630→      status: 'running',
+   631→      submittedBy: priya.id,
+   632→      configJson: makeSandboxConfig(),
+   633→      resultJson: null,
+   634→      startedAt: ago(45 * MIN),
+   635→      completedAt: null,
+   636→      durationMs: null,
+   637→      vmId: 'vm-' + sha256(999).slice(0, 12),
+   638→      createdAt: ago(1 * HOUR),
+   639→    },
+   640→    // CodeLlama v1.0.1-hotfix – queued
+   641→    {
+   642→      modelId: codellama.id,
+   643→      versionId: versions[9].id,
+   644→      status: 'queued',
+   645→      submittedBy: marcus.id,
+   646→      configJson: makeSandboxConfig(),
+   647→      resultJson: null,
+   648→      startedAt: null,
+   649→      completedAt: null,
+   650→      durationMs: null,
+   651→      createdAt: ago(30 * MIN),
+   652→    },
+   653→  ];
+   654→
+   655→  const sandboxJobs = await prisma.$transaction(
+   656→    sandboxDefs.map((j) =>
+   657→      prisma.sandboxJob.create({ data: j as any })
+   658→    )
+   659→  );
+   660→  console.log(`    ✓ ${sandboxJobs.length} sandbox jobs created`);
+   661→
+   662→  // ── 10. Registries ───────────────────────────────────────────────────────
+   663→  console.log('  Creating registries...');
+   664→  const [production, staging] = await prisma.$transaction([
+   665→    prisma.registry.create({
+   666→      data: {
+   667→        orgId: acme.id,
+   668→        name: 'production',
+   669→        description: 'Production model registry with strict security policies. All models must be signed and pass sandbox and SBOM gates.',
+   670→        policyRego: productionPolicy,
+   671→        artifactCount: 2,
+   672→        lastPublishAt: ago(17 * DAY + 13 * HOUR),
+   673→        createdAt: ago(48 * DAY),
+   674→      },
+   675→    }),
+   676→    prisma.registry.create({
+   677→      data: {
+   678→        orgId: acme.id,
+   679→        name: 'staging',
+   680→        description: 'Staging registry for pre-release models. Relaxed policy allows unsigned models for internal testing.',
+   681→        policyRego: stagingPolicy,
+   682→        artifactCount: 1,
+   683→        lastPublishAt: ago(8 * DAY),
+   684→        createdAt: ago(42 * DAY),
+   685→      },
+   686→    }),
+   687→  ]);
+   688→  console.log(`    ✓ 2 registries created`);
+   689→
+   690→  // ── 11. Registry Artifacts ───────────────────────────────────────────────
+   691→  console.log('  Creating registry artifacts...');
+   692→  const artifacts = await prisma.$transaction([
+   693→    // Production: GPT-NeoX v1.1.0
+   694→    prisma.registryArtifact.create({
+   695→      data: {
+   696→        registryId: production.id,
+   697→        modelId: gptNeox.id,
+   698→        versionId: versions[1].id,
+   699→        publishedBy: sarah.id,
+   700→        publishedAt: ago(28 * DAY),
+   701→        gateResult: 'ALLOWED',
+   702→        gateReasons: JSON.stringify([]),
+   703→      },
+   704→    }),
+   705→    // Production: Llama-3 v1.1.0
+   706→    prisma.registryArtifact.create({
+   707→      data: {
+   708→        registryId: production.id,
+   709→        modelId: llama3.id,
+   710→        versionId: versions[3].id,
+   711→        publishedBy: marcus.id,
+   712→        publishedAt: ago(17 * DAY + 13 * HOUR),
+   713→        gateResult: 'ALLOWED',
+   714→        gateReasons: JSON.stringify([]),
+   715→      },
+   716→    }),
+   717→    // Staging: SDXL v1.1.0 (has warning sandbox result but staging allows it)
+   718→    prisma.registryArtifact.create({
+   719→      data: {
+   720→        registryId: staging.id,
+   721→        modelId: sdxl.id,
+   722→        versionId: versions[7].id,
+   723→        publishedBy: sarah.id,
+   724→        publishedAt: ago(8 * DAY),
+   725→        gateResult: 'ALLOWED',
+   726→        gateReasons: JSON.stringify(['Sandbox verdict was WARNING – auto-allowed by staging policy']),
+   727→      },
+   728→    }),
+   729→  ]);
+   730→  console.log(`    ✓ ${artifacts.length} registry artifacts created`);
+   731→
+   732→  // ── 12. API Keys ─────────────────────────────────────────────────────────
+   733→  console.log('  Creating API keys...');
+   734→  const apiKeys = await prisma.$transaction([
+   735→    prisma.apiKey.create({
+   736→      data: {
+   737→        orgId: acme.id,
+   738→        name: 'CI/CD Pipeline Key',
+   739→        keyHash: sha256(500),
+   740→        keyPrefix: 'mv_sk_a3f7b2c1',
+   741→        permissions: JSON.stringify(['model:read', 'model:write', 'registry:publish', 'sandbox:submit']),
+   742→        lastUsedAt: ago(2 * HOUR),
+   743→        createdAt: ago(40 * DAY),
+   744→      },
+   745→    }),
+   746→    prisma.apiKey.create({
+   747→      data: {
+   748→        orgId: acme.id,
+   749→        name: 'Staging Deploy Key',
+   750→        keyHash: sha256(501),
+   751→        keyPrefix: 'mv_sk_e9d40856',
+   752→        permissions: JSON.stringify(['model:read', 'registry:read']),
+   753→        lastUsedAt: ago(1 * DAY),
+   754→        createdAt: ago(20 * DAY),
+   755→      },
+   756→    }),
+   757→  ]);
+   758→  console.log(`    ✓ ${apiKeys.length} API keys created`);
+   759→
+   760→  // ── 13. Audit Logs ───────────────────────────────────────────────────────
+   761→  console.log('  Creating audit logs...');
+   762→  const auditDefs = [
+   763→    // Day 30 ago
+   764→    { daysAgo: 30, hoursAgo: 6, action: 'user.invite', resourceType: 'org_member', outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ invitedEmail: 'marcus@acme-ai.dev', role: 'admin' }) },
+   765→    { daysAgo: 29, hoursAgo: 4, action: 'user.invite', resourceType: 'org_member', outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ invitedEmail: 'marcus@acme-ai.dev', role: 'admin', accepted: true }) },
+   766→
+   767→    // Model uploads
+   768→    { daysAgo: 28, hoursAgo: 10, action: 'model.upload', resourceType: 'model', resourceId: gptNeox.id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ modelName: 'GPT-NeoX-7B', version: '1.0.0', fileSizeBytes: 14500000000 }) },
+   769→    { daysAgo: 27, hoursAgo: 8, action: 'model.scan', resourceType: 'model_version', resourceId: versions[0].id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.2.15', metadata: JSON.stringify({ scanType: 'sbom', totalDeps: 47, vulnerabilities: { critical: 0, high: 2, medium: 8, low: 15 } }) },
+   770→    { daysAgo: 27, hoursAgo: 2, action: 'model.sign', resourceType: 'signature', resourceId: signatures[0].id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ modelName: 'GPT-NeoX-7B', version: '1.0.0', signerIdentity: `did:web:modelvault.dev:sarah` }) },
+   771→
+   772→    // More model uploads
+   773→    { daysAgo: 25, hoursAgo: 12, action: 'model.upload', resourceType: 'model', resourceId: llama3.id, outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ modelName: 'Llama-3-8B-Instruct', version: '1.0.0', fileSizeBytes: 15000000000 }) },
+   774→    { daysAgo: 24, hoursAgo: 9, action: 'model.scan', resourceType: 'model_version', resourceId: versions[2].id, outcome: 'success', userId: marcus.id, sourceIp: '10.0.2.15', metadata: JSON.stringify({ scanType: 'sbom', totalDeps: 52, vulnerabilities: { critical: 0, high: 0, medium: 5, low: 10 } }) },
+   775→    { daysAgo: 24, hoursAgo: 4, action: 'model.sign', resourceType: 'signature', resourceId: signatures[2].id, outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ modelName: 'Llama-3-8B-Instruct', version: '1.0.0' }) },
+   776→
+   777→    // SDXL
+   778→    { daysAgo: 20, hoursAgo: 11, action: 'model.upload', resourceType: 'model', resourceId: sdxl.id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ modelName: 'Stable-Diffusion-XL', version: '1.0.0', fileSizeBytes: 6900000000 }) },
+   779→    { daysAgo: 19, hoursAgo: 8, action: 'model.scan', resourceType: 'model_version', resourceId: versions[6].id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.2.15', metadata: JSON.stringify({ scanType: 'sbom', totalDeps: 63, vulnerabilities: { critical: 0, high: 3, medium: 11, low: 20 } }) },
+   780→    { daysAgo: 19, hoursAgo: 3, action: 'model.sign', resourceType: 'signature', outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ modelName: 'Stable-Diffusion-XL', version: '1.0.0' }) },
+   781→
+   782→    // Sandbox jobs
+   783→    { daysAgo: 29, hoursAgo: 23, action: 'sandbox.start', resourceType: 'sandbox_job', resourceId: sandboxJobs[0].id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.2.20', metadata: JSON.stringify({ modelName: 'GPT-NeoX-7B', version: '1.1.0', vmId: 'vm-' + sha256(1).slice(0, 12) }) },
+   784→    { daysAgo: 29, hoursAgo: 22, action: 'sandbox.complete', resourceType: 'sandbox_job', resourceId: sandboxJobs[0].id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.2.20', metadata: JSON.stringify({ verdict: 'PASSED', durationMs: 3600000, findings: 0 }) },
+   785→
+   786→    { daysAgo: 17, hoursAgo: 14, action: 'sandbox.start', resourceType: 'sandbox_job', resourceId: sandboxJobs[1].id, outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ modelName: 'Llama-3-8B-Instruct', version: '1.1.0' }) },
+   787→    { daysAgo: 17, hoursAgo: 13, action: 'sandbox.complete', resourceType: 'sandbox_job', resourceId: sandboxJobs[1].id, outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ verdict: 'PASSED', durationMs: 3800000 }) },
+   788→
+   789→    { daysAgo: 19, hoursAgo: 10, action: 'sandbox.start', resourceType: 'sandbox_job', resourceId: sandboxJobs[2].id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ modelName: 'Stable-Diffusion-XL', version: '1.1.0' }) },
+   790→    { daysAgo: 19, hoursAgo: 9, action: 'sandbox.complete', resourceType: 'sandbox_job', resourceId: sandboxJobs[2].id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ verdict: 'WARNING', durationMs: 4200000, findings: 1 }) },
+   791→
+   792→    { daysAgo: 14, hoursAgo: 8, action: 'sandbox.start', resourceType: 'sandbox_job', resourceId: sandboxJobs[3].id, outcome: 'success', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ modelName: 'BERT-Base-Uncased', version: '1.0.0' }) },
+   793→    { daysAgo: 14, hoursAgo: 7, action: 'sandbox.complete', resourceType: 'sandbox_job', resourceId: sandboxJobs[3].id, outcome: 'failure', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ verdict: 'FAILED', durationMs: 5100000, findings: 2, detail: 'Network egress and DNS exfiltration detected' }) },
+   794→
+   795→    // Policy evaluations
+   796→    { daysAgo: 28, hoursAgo: 1, action: 'policy.evaluate', resourceType: 'registry', resourceId: production.id, outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ registry: 'production', modelName: 'GPT-NeoX-7B', version: '1.1.0', result: 'ALLOWED', reasons: [] }) },
+   797→    { daysAgo: 17, hoursAgo: 12, action: 'registry.publish', resourceType: 'registry_artifact', outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ registry: 'production', modelName: 'Llama-3-8B-Instruct', version: '1.1.0', gateResult: 'ALLOWED' }) },
+   798→    { daysAgo: 8, hoursAgo: 5, action: 'registry.publish', resourceType: 'registry_artifact', outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ registry: 'staging', modelName: 'Stable-Diffusion-XL', version: '1.1.0', gateResult: 'ALLOWED' }) },
+   799→
+   800→    // Denied publish attempts
+   801→    { daysAgo: 9, hoursAgo: 14, action: 'policy.evaluate', resourceType: 'registry', resourceId: production.id, outcome: 'denied', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ registry: 'production', modelName: 'CodeLlama-13B', version: '1.0.1-hotfix', result: 'DENIED', reasons: ['Model has 2 CRITICAL SBOM vulnerabilities', 'Model must be cryptographically signed'] }) },
+   802→    { daysAgo: 13, hoursAgo: 10, action: 'policy.evaluate', resourceType: 'registry', resourceId: production.id, outcome: 'denied', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ registry: 'production', modelName: 'BERT-Base-Uncased', version: '1.0.0', result: 'DENIED', reasons: ['Model has CRITICAL sandbox behavioral findings', 'Model has 1 CRITICAL SBOM vulnerability'] }) },
+   803→
+   804→    // User invitations
+   805→    { daysAgo: 30, hoursAgo: 2, action: 'user.invite', resourceType: 'org_member', outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ invitedEmail: 'priya@acme-ai.dev', role: 'developer' }) },
+   806→    { daysAgo: 29, hoursAgo: 22, action: 'user.invite', resourceType: 'org_member', outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ invitedEmail: 'priya@acme-ai.dev', role: 'developer', accepted: true }) },
+   807→
+   808→    // NeuralSec org activity
+   809→    { daysAgo: 20, hoursAgo: 6, action: 'user.invite', resourceType: 'org_member', outcome: 'success', userId: james.id, sourceIp: '172.16.0.5', metadata: JSON.stringify({ invitedEmail: 'lisa@neuralsec.dev', role: 'developer' }) },
+   810→    { daysAgo: 19, hoursAgo: 20, action: 'user.invite', resourceType: 'org_member', outcome: 'success', userId: james.id, sourceIp: '172.16.0.5', metadata: JSON.stringify({ invitedEmail: 'lisa@neuralsec.dev', role: 'developer', accepted: true }) },
+   811→
+   812→    // API key creation
+   813→    { daysAgo: 40, hoursAgo: 8, action: 'api_key.create', resourceType: 'api_key', outcome: 'success', userId: sarah.id, sourceIp: '10.0.1.42', metadata: JSON.stringify({ keyName: 'CI/CD Pipeline Key', keyPrefix: 'mv_sk_a3f7...', permissions: ['model:read', 'model:write', 'registry:publish', 'sandbox:submit'] }) },
+   814→    { daysAgo: 20, hoursAgo: 3, action: 'api_key.create', resourceType: 'api_key', outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ keyName: 'Staging Deploy Key', keyPrefix: 'mv_sk_e9d4...', permissions: ['model:read', 'registry:read'] }) },
+   815→
+   816→    // Failed actions
+   817→    { daysAgo: 12, hoursAgo: 16, action: 'model.upload', resourceType: 'model', outcome: 'failure', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ modelName: 'Malicious-Test-Model', error: 'Storage quota exceeded' }) },
+   818→    { daysAgo: 7, hoursAgo: 11, action: 'model.sign', resourceType: 'signature', outcome: 'denied', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ modelName: 'CodeLlama-13B', version: '1.0.1-hotfix', error: 'Insufficient permissions – developer role cannot sign models' }) },
+   819→    { daysAgo: 3, hoursAgo: 9, action: 'registry.publish', resourceType: 'registry_artifact', outcome: 'denied', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ registry: 'production', modelName: 'BERT-Base-Uncased', error: 'Insufficient permissions – developer cannot publish to production' }) },
+   820→
+   821→    // Recent activity
+   822→    { daysAgo: 1, hoursAgo: 2, action: 'model.upload', resourceType: 'model', resourceId: whisper.id, outcome: 'success', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ modelName: 'Whisper-Large-v3', version: '1.1.0-beta', fileSizeBytes: 2950000000 }) },
+   823→    { daysAgo: 0, hoursAgo: 1, action: 'sandbox.start', resourceType: 'sandbox_job', resourceId: sandboxJobs[4].id, outcome: 'success', userId: priya.id, sourceIp: '10.0.4.101', metadata: JSON.stringify({ modelName: 'Whisper-Large-v3', version: '1.1.0-beta', status: 'running' }) },
+   824→    { daysAgo: 0, hoursAgo: 0, action: 'sandbox.start', resourceType: 'sandbox_job', resourceId: sandboxJobs[5].id, outcome: 'success', userId: marcus.id, sourceIp: '10.0.3.88', metadata: JSON.stringify({ modelName: 'CodeLlama-13B', version: '1.0.1-hotfix', status: 'queued' }) },
+   825→  ];
+   826→
+   827→  const auditLogs = await prisma.$transaction(
+   828→    auditDefs.map((a) =>
+   829→      prisma.auditLog.create({
+   830→        data: {
+   831→          orgId: a.userId === james.id || a.userId === lisa.id ? neuralsec.id : acme.id,
+   832→          userId: a.userId,
+   833→          actor: users.find((u) => u.id === a.userId)!.name,
+   834→          action: a.action,
+   835→          resourceType: a.resourceType,
+   836→          resourceId: a.resourceId || null,
+   837→          outcome: a.outcome,
+   838→          sourceIp: a.sourceIp,
+   839→          metadata: a.metadata,
+   840→          timestamp: ago(a.daysAgo * DAY + a.hoursAgo * HOUR),
+   841→        },
+   842→      })
+   843→    )
+   844→  );
+   845→  console.log(`    ✓ ${auditLogs.length} audit log entries created`);
+   846→
+   847→  // ── Summary ──────────────────────────────────────────────────────────────
+   848→  console.log('\n✅ Seed complete!');
+   849→  console.log(`   Organizations: 2`);
+   850→  console.log(`   Users:         5`);
+   851→  console.log(`   Memberships:   5`);
+   852→  console.log(`   Models:        6`);
+   853→  console.log(`   Versions:      12`);
+   854→  console.log(`   Signatures:    5`);
+   855→  console.log(`   SBOMs:         12`);
+   856→  console.log(`   Sandbox Jobs:  6`);
+   857→  console.log(`   Registries:    2`);
+   858→  console.log(`   Artifacts:     3`);
+   859→  console.log(`   API Keys:      2`);
+   860→  console.log(`   Audit Logs:    ${auditLogs.length}`);
+   861→}
+   862→
+   863→main()
+   864→  .catch((e) => {
+   865→    console.error('❌ Seed failed:', e);
+   866→    process.exit(1);
+   867→  })
+   868→  .finally(async () => {
+   869→    await prisma.$disconnect();
+   870→  });

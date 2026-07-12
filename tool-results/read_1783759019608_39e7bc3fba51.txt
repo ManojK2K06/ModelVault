@@ -1,0 +1,1215 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback } from 'react';
+     4→     4→import { useAppStore } from '@/lib/store';
+     5→     5→import { useToast } from '@/hooks/use-toast';
+     6→     6→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+     7→     7→import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+     8→     8→import { Button } from '@/components/ui/button';
+     9→     9→import { Input } from '@/components/ui/input';
+    10→    10→import { Label } from '@/components/ui/label';
+    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→import { Separator } from '@/components/ui/separator';
+    13→    13→import { Switch } from '@/components/ui/switch';
+    14→    14→import { Progress } from '@/components/ui/progress';
+    15→    15→import { Skeleton } from '@/components/ui/skeleton';
+    16→    16→import { Checkbox } from '@/components/ui/checkbox';
+    17→    17→import {
+    18→    18→  Table,
+    19→    19→  TableHeader,
+    20→    20→  TableRow,
+    21→    21→  TableHead,
+    22→    22→  TableBody,
+    23→    23→  TableCell,
+    24→    24→} from '@/components/ui/table';
+    25→    25→import {
+    26→    26→  Dialog,
+    27→    27→  DialogContent,
+    28→    28→  DialogHeader,
+    29→    29→  DialogTitle,
+    30→    30→  DialogDescription,
+    31→    31→  DialogFooter,
+    32→    32→} from '@/components/ui/dialog';
+    33→    33→import {
+    34→    34→  AlertDialog,
+    35→    35→  AlertDialogAction,
+    36→    36→  AlertDialogCancel,
+    37→    37→  AlertDialogContent,
+    38→    38→  AlertDialogDescription,
+    39→    39→  AlertDialogFooter,
+    40→    40→  AlertDialogHeader,
+    41→    41→  AlertDialogTitle,
+    42→    42→} from '@/components/ui/alert-dialog';
+    43→    43→import {
+    44→    44→  Select,
+    45→    45→  SelectContent,
+    46→    46→  SelectItem,
+    47→    47→  SelectTrigger,
+    48→    48→  SelectValue,
+    49→    49→} from '@/components/ui/select';
+    50→    50→import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+    51→    51→import {
+    52→    52→  Users,
+    53→    53→  Key,
+    54→    54→  Shield,
+    55→    55→  Settings,
+    56→    56→  Plus,
+    57→    57→  Trash2,
+    58→    58→  Copy,
+    59→    59→  Check,
+    60→    60→  ExternalLink,
+    61→    61→  AlertTriangle,
+    62→    62→  Lock,
+    63→    63→  Clock,
+    64→    64→  UserPlus,
+    65→    65→  Loader2,
+    66→    66→} from 'lucide-react';
+    67→    67→import { formatDistanceToNow } from 'date-fns';
+    68→    68→
+    69→    69→// ── Types ─────────────────────────────────────────────────────────────────────
+    70→    70→
+    71→    71→interface OrgData {
+    72→    72→  id: string;
+    73→    73→  name: string;
+    74→    74→  slug: string;
+    75→    75→  plan: string;
+    76→    76→  storageQuotaBytes: number;
+    77→    77→  storageUsedBytes: number;
+    78→    78→  maxMembers: number;
+    79→    79→  createdAt: string;
+    80→    80→  updatedAt: string;
+    81→    81→  stats: {
+    82→    82→    memberCount: number;
+    83→    83→    modelCount: number;
+    84→    84→    storageUsed: number;
+    85→    85→    storageQuota: number;
+    86→    86→    storagePercent: number;
+    87→    87→  };
+    88→    88→}
+    89→    89→
+    90→    90→interface Member {
+    91→    91→  id: string;
+    92→    92→  orgId: string;
+    93→    93→  userId: string;
+    94→    94→  role: string;
+    95→    95→  acceptedAt: string | null;
+    96→    96→  createdAt: string;
+    97→    97→  user: {
+    98→    98→    id: string;
+    99→    99→    email: string;
+   100→   100→    name: string;
+   101→   101→    avatarUrl: string | null;
+   102→   102→  };
+   103→   103→}
+   104→   104→
+   105→   105→interface ApiKey {
+   106→   106→  id: string;
+   107→   107→  name: string;
+   108→   108→  keyPrefix: string;
+   109→   109→  permissions: string | null;
+   110→   110→  expiresAt: string | null;
+   111→   111→  lastUsedAt: string | null;
+   112→   112→  createdAt: string;
+   113→   113→}
+   114→   114→
+   115→   115→// ── Helpers ───────────────────────────────────────────────────────────────────
+   116→   116→
+   117→   117→function formatBytes(bytes: number): string {
+   118→   118→  if (bytes === 0) return '0 B';
+   119→   119→  const k = 1024;
+   120→   120→  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+   121→   121→  const i = Math.floor(Math.log(bytes) / Math.log(k));
+   122→   122→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+   123→   123→}
+   124→   124→
+   125→   125→function maskKey(prefix: string): string {
+   126→   126→  if (!prefix) return 'mv_sk_****';
+   127→   127→  return prefix + '****xxxx';
+   128→   128→}
+   129→   129→
+   130→   130→const PERMISSION_OPTIONS = [
+   131→   131→  { value: 'model:upload', label: 'Upload Models' },
+   132→   132→  { value: 'model:read', label: 'Read Models' },
+   133→   133→  { value: 'model:sign', label: 'Sign Models' },
+   134→   134→  { value: 'registry:publish', label: 'Publish to Registry' },
+   135→   135→  { value: 'audit:read', label: 'Read Audit Logs' },
+   136→   136→];
+   137→   137→
+   138→   138→const ROLE_OPTIONS = [
+   139→   139→  { value: 'owner', label: 'Owner' },
+   140→   140→  { value: 'admin', label: 'Admin' },
+   141→   141→  { value: 'developer', label: 'Developer' },
+   142→   142→  { value: 'viewer', label: 'Viewer' },
+   143→   143→];
+   144→   144→
+   145→   145→function getRoleBadgeColor(role: string) {
+   146→   146→  switch (role) {
+   147→   147→    case 'owner':
+   148→   148→      return 'bg-amber-500/15 text-amber-400 border-amber-500/20';
+   149→   149→    case 'admin':
+   150→   150→      return 'bg-violet-500/15 text-violet-400 border-violet-500/20';
+   151→   151→    case 'developer':
+   152→   152→      return 'bg-sky-500/15 text-sky-400 border-sky-500/20';
+   153→   153→    default:
+   154→   154→      return 'bg-muted text-muted-foreground border-border';
+   155→   155→  }
+   156→   156→}
+   157→   157→
+   158→   158→// ── General Tab ───────────────────────────────────────────────────────────────
+   159→   159→
+   160→   160→function GeneralTab({ org, loading }: { org: OrgData | null; loading: boolean }) {
+   161→   161→  if (loading) {
+   162→   162→    return (
+   163→   163→      <div className="space-y-6">
+   164→   164→        {Array.from({ length: 4 }).map((_, i) => (
+   165→   165→          <div key={i} className="space-y-2">
+   166→   166→            <Skeleton className="h-4 w-24" />
+   167→   167→            <Skeleton className="h-9 w-80" />
+   168→   168→          </div>
+   169→   169→        ))}
+   170→   170→      </div>
+   171→   171→    );
+   172→   172→  }
+   173→   173→
+   174→   174→  if (!org) return null;
+   175→   175→
+   176→   176→  return (
+   177→   177→    <div className="space-y-6">
+   178→   178→      <Card>
+   179→   179→        <CardHeader>
+   180→   180→          <CardTitle className="text-base">Organization Info</CardTitle>
+   181→   181→          <CardDescription>Basic information about your organization.</CardDescription>
+   182→   182→        </CardHeader>
+   183→   183→        <CardContent className="space-y-4">
+   184→   184→          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   185→   185→            <div className="space-y-2">
+   186→   186→              <Label>Organization Name</Label>
+   187→   187→              <Input value={org.name} readOnly className="bg-muted/50" />
+   188→   188→            </div>
+   189→   189→            <div className="space-y-2">
+   190→   190→              <Label>Slug</Label>
+   191→   191→              <Input value={org.slug} readOnly className="bg-muted/50 font-mono" />
+   192→   192→            </div>
+   193→   193→          </div>
+   194→   194→          <div className="space-y-2">
+   195→   195→            <Label>Plan Tier</Label>
+   196→   196→            <div className="flex items-center gap-3">
+   197→   197→              <Input
+   198→   198→                value={org.plan.charAt(0).toUpperCase() + org.plan.slice(1)}
+   199→   199→                readOnly
+   200→   200→                className="bg-muted/50 max-w-[200px]"
+   201→   201→              />
+   202→   202→              <Badge variant="outline" className="border-amber-500/30 text-amber-400">
+   203→   203→                <ExternalLink className="mr-1 h-3 w-3" />
+   204→   204→                Contact Sales
+   205→   205→              </Badge>
+   206→   206→            </div>
+   207→   207→          </div>
+   208→   208→        </CardContent>
+   209→   209→      </Card>
+   210→   210→
+   211→   211→      <Card>
+   212→   212→        <CardHeader>
+   213→   213→          <CardTitle className="text-base">Storage Usage</CardTitle>
+   214→   214→          <CardDescription>
+   215→   215→            {formatBytes(org.stats.storageUsed)} of {formatBytes(org.stats.storageQuota)} used
+   216→   216→          </CardDescription>
+   217→   217→        </CardHeader>
+   218→   218→        <CardContent className="space-y-3">
+   219→   219→          <Progress value={org.stats.storagePercent} className="h-3" />
+   220→   220→          <div className="flex items-center justify-between text-sm">
+   221→   221→            <span className="text-muted-foreground">{org.stats.storagePercent}% used</span>
+   222→   222→            <span className="text-muted-foreground">
+   223→   223→              {formatBytes(org.stats.storageQuota - org.stats.storageUsed)} available
+   224→   224→            </span>
+   225→   225→          </div>
+   226→   226→        </CardContent>
+   227→   227→      </Card>
+   228→   228→    </div>
+   229→   229→  );
+   230→   230→}
+   231→   231→
+   232→   232→// ── Members Tab ───────────────────────────────────────────────────────────────
+   233→   233→
+   234→   234→function MembersTab() {
+   235→   235→  const { user } = useAppStore();
+   236→   236→  const { toast } = useToast();
+   237→   237→  const [members, setMembers] = useState<Member[]>([]);
+   238→   238→  const [loading, setLoading] = useState(true);
+   239→   239→  const [inviteOpen, setInviteOpen] = useState(false);
+   240→   240→  const [inviteEmail, setInviteEmail] = useState('');
+   241→   241→  const [inviteRole, setInviteRole] = useState('viewer');
+   242→   242→  const [inviting, setInviting] = useState(false);
+   243→   243→  const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
+   244→   244→  const [removing, setRemoving] = useState(false);
+   245→   245→  const [changingRole, setChangingRole] = useState<string | null>(null);
+   246→   246→
+   247→   247→  const fetchMembers = useCallback(async () => {
+   248→   248→    try {
+   249→   249→      const res = await fetch('/api/org/members');
+   250→   250→      const data = await res.json();
+   251→   251→      if (data.items) setMembers(data.items);
+   252→   252→    } catch {
+   253→   253→      toast({ title: 'Failed to load members', variant: 'destructive' });
+   254→   254→    } finally {
+   255→   255→      setLoading(false);
+   256→   256→    }
+   257→   257→  }, [toast]);
+   258→   258→
+   259→   259→  useEffect(() => {
+   260→   260→    fetchMembers();
+   261→   261→  }, [fetchMembers]);
+   262→   262→
+   263→   263→  const handleInvite = async () => {
+   264→   264→    if (!inviteEmail.trim()) return;
+   265→   265→    setInviting(true);
+   266→   266→    try {
+   267→   267→      const res = await fetch('/api/org/members', {
+   268→   268→        method: 'POST',
+   269→   269→        headers: { 'Content-Type': 'application/json' },
+   270→   270→        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+   271→   271→      });
+   272→   272→      if (res.ok) {
+   273→   273→        toast({ title: 'Member invited successfully' });
+   274→   274→        setInviteOpen(false);
+   275→   275→        setInviteEmail('');
+   276→   276→        setInviteRole('viewer');
+   277→   277→        fetchMembers();
+   278→   278→      } else {
+   279→   279→        const err = await res.json();
+   280→   280→        toast({ title: err.error || 'Failed to invite member', variant: 'destructive' });
+   281→   281→      }
+   282→   282→    } catch {
+   283→   283→      toast({ title: 'Failed to invite member', variant: 'destructive' });
+   284→   284→    } finally {
+   285→   285→      setInviting(false);
+   286→   286→    }
+   287→   287→  };
+   288→   288→
+   289→   289→  const handleRoleChange = async (memberId: string, newRole: string) => {
+   290→   290→    setChangingRole(memberId);
+   291→   291→    try {
+   292→   292→      const res = await fetch(`/api/org/members/${memberId}`, {
+   293→   293→        method: 'PATCH',
+   294→   294→        headers: { 'Content-Type': 'application/json' },
+   295→   295→        body: JSON.stringify({ role: newRole }),
+   296→   296→      });
+   297→   297→      if (res.ok) {
+   298→   298→        toast({ title: 'Role updated successfully' });
+   299→   299→        fetchMembers();
+   300→   300→      } else {
+   301→   301→        const err = await res.json();
+   302→   302→        toast({ title: err.error || 'Failed to update role', variant: 'destructive' });
+   303→   303→      }
+   304→   304→    } catch {
+   305→   305→      toast({ title: 'Failed to update role', variant: 'destructive' });
+   306→   306→    } finally {
+   307→   307→      setChangingRole(null);
+   308→   308→    }
+   309→   309→  };
+   310→   310→
+   311→   311→  const handleRemove = async () => {
+   312→   312→    if (!removeTarget) return;
+   313→   313→    setRemoving(true);
+   314→   314→    try {
+   315→   315→      const res = await fetch(`/api/org/members/${removeTarget.id}`, {
+   316→   316→        method: 'DELETE',
+   317→   317→      });
+   318→   318→      if (res.ok) {
+   319→   319→        toast({ title: 'Member removed successfully' });
+   320→   320→        setRemoveTarget(null);
+   321→   321→        fetchMembers();
+   322→   322→      } else {
+   323→   323→        const err = await res.json();
+   324→   324→        toast({ title: err.error || 'Failed to remove member', variant: 'destructive' });
+   325→   325→      }
+   326→   326→    } catch {
+   327→   327→      toast({ title: 'Failed to remove member', variant: 'destructive' });
+   328→   328→    } finally {
+   329→   329→      setRemoving(false);
+   330→   330→    }
+   331→   331→  };
+   332→   332→
+   333→   333→  const isOwner = user?.role === 'owner';
+   334→   334→
+   335→   335→  return (
+   336→   336→    <div className="space-y-6">
+   337→   337→      <div className="flex items-center justify-between">
+   338→   338→        <div>
+   339→   339→          <p className="text-sm text-muted-foreground">
+   340→   340→            {members.length} member{members.length !== 1 ? 's' : ''}
+   341→   341→          </p>
+   342→   342→        </div>
+   343→   343→        <Button onClick={() => setInviteOpen(true)}>
+   344→   344→          <UserPlus className="mr-2 h-4 w-4" />
+   345→   345→          Invite Member
+   346→   346→        </Button>
+   347→   347→      </div>
+   348→   348→
+   349→   349→      <div className="rounded-lg border">
+   350→   350→        {loading ? (
+   351→   351→          <div className="space-y-3 p-6">
+   352→   352→            {Array.from({ length: 4 }).map((_, i) => (
+   353→   353→              <div key={i} className="flex items-center gap-4">
+   354→   354→                <Skeleton className="h-8 w-8 rounded-full" />
+   355→   355→                <Skeleton className="h-4 w-[160px]" />
+   356→   356→                <Skeleton className="h-4 w-[200px]" />
+   357→   357→                <Skeleton className="h-4 w-[80px]" />
+   358→   358→              </div>
+   359→   359→            ))}
+   360→   360→          </div>
+   361→   361→        ) : (
+   362→   362→          <Table>
+   363→   363→            <TableHeader>
+   364→   364→              <TableRow>
+   365→   365→                <TableHead>Name</TableHead>
+   366→   366→                <TableHead>Email</TableHead>
+   367→   367→                <TableHead>Role</TableHead>
+   368→   368→                <TableHead>Joined</TableHead>
+   369→   369→                <TableHead className="w-[80px]">Actions</TableHead>
+   370→   370→              </TableRow>
+   371→   371→            </TableHeader>
+   372→   372→            <TableBody>
+   373→   373→              {members.map((member) => (
+   374→   374→                <TableRow key={member.id}>
+   375→   375→                  <TableCell className="font-medium">{member.user.name}</TableCell>
+   376→   376→                  <TableCell className="text-sm text-muted-foreground">
+   377→   377→                    {member.user.email}
+   378→   378→                  </TableCell>
+   379→   379→                  <TableCell>
+   380→   380→                    <Select
+   381→   381→                      value={member.role}
+   382→   382→                      onValueChange={(v) => handleRoleChange(member.id, v)}
+   383→   383→                      disabled={!isOwner || changingRole === member.id}
+   384→   384→                    >
+   385→   385→                      <SelectTrigger className={`h-7 w-[130px] text-xs ${getRoleBadgeColor(member.role)} border-transparent`}>
+   386→   386→                        <SelectValue />
+   387→   387→                      </SelectTrigger>
+   388→   388→                      <SelectContent>
+   389→   389→                        {ROLE_OPTIONS.map((opt) => (
+   390→   390→                          <SelectItem key={opt.value} value={opt.value}>
+   391→   391→                            {opt.label}
+   392→   392→                          </SelectItem>
+   393→   393→                        ))}
+   394→   394→                      </SelectContent>
+   395→   395→                    </Select>
+   396→   396→                  </TableCell>
+   397→   397→                  <TableCell className="text-sm text-muted-foreground">
+   398→   398→                    {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
+   399→   399→                  </TableCell>
+   400→   400→                  <TableCell>
+   401→   401→                    {isOwner && member.role !== 'owner' && (
+   402→   402→                      <Button
+   403→   403→                        variant="ghost"
+   404→   404→                        size="icon"
+   405→   405→                        className="h-8 w-8 text-muted-foreground hover:text-red-400"
+   406→   406→                        onClick={() => setRemoveTarget(member)}
+   407→   407→                      >
+   408→   408→                        <Trash2 className="h-4 w-4" />
+   409→   409→                      </Button>
+   410→   410→                    )}
+   411→   411→                  </TableCell>
+   412→   412→                </TableRow>
+   413→   413→              ))}
+   414→   414→            </TableBody>
+   415→   415→          </Table>
+   416→   416→        )}
+   417→   417→      </div>
+   418→   418→
+   419→   419→      {/* Invite Member Dialog */}
+   420→   420→      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+   421→   421→        <DialogContent className="max-w-md">
+   422→   422→          <DialogHeader>
+   423→   423→            <DialogTitle>Invite Member</DialogTitle>
+   424→   424→            <DialogDescription>
+   425→   425→              Add a new member to your organization.
+   426→   426→            </DialogDescription>
+   427→   427→          </DialogHeader>
+   428→   428→          <div className="space-y-4 py-2">
+   429→   429→            <div className="space-y-2">
+   430→   430→              <Label htmlFor="invite-email">Email</Label>
+   431→   431→              <Input
+   432→   432→                id="invite-email"
+   433→   433→                type="email"
+   434→   434→                placeholder="user@example.com"
+   435→   435→                value={inviteEmail}
+   436→   436→                onChange={(e) => setInviteEmail(e.target.value)}
+   437→   437→              />
+   438→   438→            </div>
+   439→   439→            <div className="space-y-2">
+   440→   440→              <Label>Role</Label>
+   441→   441→              <Select value={inviteRole} onValueChange={setInviteRole}>
+   442→   442→                <SelectTrigger className="w-full">
+   443→   443→                  <SelectValue />
+   444→   444→                </SelectTrigger>
+   445→   445→                <SelectContent>
+   446→   446→                  {ROLE_OPTIONS.map((opt) => (
+   447→   447→                    <SelectItem key={opt.value} value={opt.value}>
+   448→   448→                      {opt.label}
+   449→   449→                    </SelectItem>
+   450→   450→                  ))}
+   451→   451→                </SelectContent>
+   452→   452→              </Select>
+   453→   453→            </div>
+   454→   454→          </div>
+   455→   455→          <DialogFooter>
+   456→   456→            <Button variant="outline" onClick={() => setInviteOpen(false)}>
+   457→   457→              Cancel
+   458→   458→            </Button>
+   459→   459→            <Button onClick={handleInvite} disabled={!inviteEmail.trim() || inviting}>
+   460→   460→              {inviting ? 'Inviting...' : 'Send Invite'}
+   461→   461→            </Button>
+   462→   462→          </DialogFooter>
+   463→   463→        </DialogContent>
+   464→   464→      </Dialog>
+   465→   465→
+   466→   466→      {/* Remove Member Alert */}
+   467→   467→      <AlertDialog open={!!removeTarget} onOpenChange={() => setRemoveTarget(null)}>
+   468→   468→        <AlertDialogContent>
+   469→   469→          <AlertDialogHeader>
+   470→   470→            <AlertDialogTitle>Remove Member</AlertDialogTitle>
+   471→   471→            <AlertDialogDescription>
+   472→   472→              Are you sure you want to remove{' '}
+   473→   473→              <span className="font-medium text-foreground">
+   474→   474→                {removeTarget?.user.name}
+   475→   475→              </span>{' '}
+   476→   476→              from the organization? This action cannot be undone.
+   477→   477→            </AlertDialogDescription>
+   478→   478→          </AlertDialogHeader>
+   479→   479→          <AlertDialogFooter>
+   480→   480→            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+   481→   481→            <AlertDialogAction
+   482→   482→              onClick={handleRemove}
+   483→   483→              disabled={removing}
+   484→   484→              className="bg-red-600 text-white hover:bg-red-700"
+   485→   485→            >
+   486→   486→              {removing ? 'Removing...' : 'Remove'}
+   487→   487→            </AlertDialogAction>
+   488→   488→          </AlertDialogFooter>
+   489→   489→        </AlertDialogContent>
+   490→   490→      </AlertDialog>
+   491→   491→    </div>
+   492→   492→  );
+   493→   493→}
+   494→   494→
+   495→   495→// ── API Keys Tab ──────────────────────────────────────────────────────────────
+   496→   496→
+   497→   497→function ApiKeysTab() {
+   498→   498→  const { toast } = useToast();
+   499→   499→  const [keys, setKeys] = useState<ApiKey[]>([]);
+   500→   500→  const [loading, setLoading] = useState(true);
+   501→   501→  const [createOpen, setCreateOpen] = useState(false);
+   502→   502→  const [newKeyName, setNewKeyName] = useState('');
+   503→   503→  const [newKeyExpiry, setNewKeyExpiry] = useState('');
+   504→   504→  const [newKeyPermissions, setNewKeyPermissions] = useState<string[]>([]);
+   505→   505→  const [creating, setCreating] = useState(false);
+   506→   506→  const [createdKey, setCreatedKey] = useState<string | null>(null);
+   507→   507→  const [copied, setCopied] = useState(false);
+   508→   508→  const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
+   509→   509→  const [revoking, setRevoking] = useState(false);
+   510→   510→
+   511→   511→  const fetchKeys = useCallback(async () => {
+   512→   512→    try {
+   513→   513→      const res = await fetch('/api/org/api-keys');
+   514→   514→      const data = await res.json();
+   515→   515→      if (data.items) setKeys(data.items);
+   516→   516→    } catch {
+   517→   517→      toast({ title: 'Failed to load API keys', variant: 'destructive' });
+   518→   518→    } finally {
+   519→   519→      setLoading(false);
+   520→   520→    }
+   521→   521→  }, [toast]);
+   522→   522→
+   523→   523→  useEffect(() => {
+   524→   524→    fetchKeys();
+   525→   525→  }, [fetchKeys]);
+   526→   526→
+   527→   527→  const handleCreate = async () => {
+   528→   528→    if (!newKeyName.trim()) return;
+   529→   529→    setCreating(true);
+   530→   530→    try {
+   531→   531→      const res = await fetch('/api/org/api-keys', {
+   532→   532→        method: 'POST',
+   533→   533→        headers: { 'Content-Type': 'application/json' },
+   534→   534→        body: JSON.stringify({
+   535→   535→          name: newKeyName,
+   536→   536→          expiresAt: newKeyExpiry || null,
+   537→   537→          permissions: newKeyPermissions.length > 0 ? newKeyPermissions : null,
+   538→   538→        }),
+   539→   539→      });
+   540→   540→      if (res.ok) {
+   541→   541→        const data = await res.json();
+   542→   542→        setCreatedKey(data.key);
+   543→   543→        setNewKeyName('');
+   544→   544→        setNewKeyExpiry('');
+   545→   545→        setNewKeyPermissions([]);
+   546→   546→        fetchKeys();
+   547→   547→      } else {
+   548→   548→        const err = await res.json();
+   549→   549→        toast({ title: err.error || 'Failed to create API key', variant: 'destructive' });
+   550→   550→      }
+   551→   551→    } catch {
+   552→   552→      toast({ title: 'Failed to create API key', variant: 'destructive' });
+   553→   553→    } finally {
+   554→   554→      setCreating(false);
+   555→   555→    }
+   556→   556→  };
+   557→   557→
+   558→   558→  const handleCopyKey = () => {
+   559→   559→    if (createdKey) {
+   560→   560→      navigator.clipboard.writeText(createdKey);
+   561→   561→      setCopied(true);
+   562→   562→      setTimeout(() => setCopied(false), 2000);
+   563→   563→    }
+   564→   564→  };
+   565→   565→
+   566→   566→  const handleRevoke = async () => {
+   567→   567→    if (!revokeTarget) return;
+   568→   568→    setRevoking(true);
+   569→   569→    try {
+   570→   570→      const res = await fetch(`/api/org/api-keys/${revokeTarget.id}`, {
+   571→   571→        method: 'DELETE',
+   572→   572→      });
+   573→   573→      if (res.ok) {
+   574→   574→        toast({ title: 'API key revoked successfully' });
+   575→   575→        setRevokeTarget(null);
+   576→   576→        fetchKeys();
+   577→   577→      } else {
+   578→   578→        const err = await res.json();
+   579→   579→        toast({ title: err.error || 'Failed to revoke API key', variant: 'destructive' });
+   580→   580→      }
+   581→   581→    } catch {
+   582→   582→      toast({ title: 'Failed to revoke API key', variant: 'destructive' });
+   583→   583→    } finally {
+   584→   584→      setRevoking(false);
+   585→   585→    }
+   586→   586→  };
+   587→   587→
+   588→   588→  const togglePermission = (perm: string) => {
+   589→   589→    setNewKeyPermissions((prev) =>
+   590→   590→      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+   591→   591→    );
+   592→   592→  };
+   593→   593→
+   594→   594→  return (
+   595→   595→    <div className="space-y-6">
+   596→   596→      <div className="flex items-center justify-between">
+   597→   597→        <p className="text-sm text-muted-foreground">
+   598→   598→          {keys.length} active key{keys.length !== 1 ? 's' : ''}
+   599→   599→        </p>
+   600→   600→        <Button onClick={() => setCreateOpen(true)}>
+   601→   601→          <Plus className="mr-2 h-4 w-4" />
+   602→   602→          Create API Key
+   603→   603→        </Button>
+   604→   604→      </div>
+   605→   605→
+   606→   606→      <div className="rounded-lg border">
+   607→   607→        {loading ? (
+   608→   608→          <div className="space-y-3 p-6">
+   609→   609→            {Array.from({ length: 3 }).map((_, i) => (
+   610→   610→              <div key={i} className="flex items-center gap-4">
+   611→   611→                <Skeleton className="h-4 w-[160px]" />
+   612→   612→                <Skeleton className="h-4 w-[180px]" />
+   613→   613→                <Skeleton className="h-4 w-[100px]" />
+   614→   614→                <Skeleton className="h-4 w-[80px]" />
+   615→   615→              </div>
+   616→   616→            ))}
+   617→   617→          </div>
+   618→   618→        ) : keys.length === 0 ? (
+   619→   619→          <div className="flex flex-col items-center justify-center py-12 text-center">
+   620→   620→            <Key className="mb-3 h-8 w-8 text-muted-foreground/50" />
+   621→   621→            <p className="text-sm text-muted-foreground">No API keys yet.</p>
+   622→   622→            <p className="text-xs text-muted-foreground mb-3">
+   623→   623→              Create an API key to authenticate programmatic access.
+   624→   624→            </p>
+   625→   625→            <Button size="sm" onClick={() => setCreateOpen(true)}>
+   626→   626→              <Plus className="mr-2 h-3 w-3" />
+   627→   627→              Create API Key
+   628→   628→            </Button>
+   629→   629→          </div>
+   630→   630→        ) : (
+   631→   631→          <Table>
+   632→   632→            <TableHeader>
+   633→   633→              <TableRow>
+   634→   634→                <TableHead>Name</TableHead>
+   635→   635→                <TableHead>Key</TableHead>
+   636→   636→                <TableHead>Created</TableHead>
+   637→   637→                <TableHead>Last Used</TableHead>
+   638→   638→                <TableHead>Status</TableHead>
+   639→   639→                <TableHead className="w-[80px]">Actions</TableHead>
+   640→   640→              </TableRow>
+   641→   641→            </TableHeader>
+   642→   642→            <TableBody>
+   643→   643→              {keys.map((key) => (
+   644→   644→                <TableRow key={key.id}>
+   645→   645→                  <TableCell className="font-medium">{key.name}</TableCell>
+   646→   646→                  <TableCell className="font-mono text-xs text-muted-foreground">
+   647→   647→                    {key.keyPrefix}****
+   648→   648→                  </TableCell>
+   649→   649→                  <TableCell className="text-sm text-muted-foreground">
+   650→   650→                    {formatDistanceToNow(new Date(key.createdAt), { addSuffix: true })}
+   651→   651→                  </TableCell>
+   652→   652→                  <TableCell className="text-sm text-muted-foreground">
+   653→   653→                    {key.lastUsedAt
+   654→   654→                      ? formatDistanceToNow(new Date(key.lastUsedAt), { addSuffix: true })
+   655→   655→                      : 'Never'}
+   656→   656→                  </TableCell>
+   657→   657→                  <TableCell>
+   658→   658→                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20">
+   659→   659→                      Active
+   660→   660→                    </Badge>
+   661→   661→                  </TableCell>
+   662→   662→                  <TableCell>
+   663→   663→                    <Button
+   664→   664→                      variant="ghost"
+   665→   665→                      size="icon"
+   666→   666→                      className="h-8 w-8 text-muted-foreground hover:text-red-400"
+   667→   667→                      onClick={() => setRevokeTarget(key)}
+   668→   668→                    >
+   669→   669→                      <Trash2 className="h-4 w-4" />
+   670→   670→                    </Button>
+   671→   671→                  </TableCell>
+   672→   672→                </TableRow>
+   673→   673→              ))}
+   674→   674→            </TableBody>
+   675→   675→          </Table>
+   676→   676→        )}
+   677→   677→      </div>
+   678→   678→
+   679→   679→      {/* Create API Key Dialog */}
+   680→   680→      <Dialog
+   681→   681→        open={createOpen && !createdKey}
+   682→   682→        onOpenChange={(open) => {
+   683→   683→          setCreateOpen(open);
+   684→   684→          if (!open) {
+   685→   685→            setNewKeyName('');
+   686→   686→            setNewKeyExpiry('');
+   687→   687→            setNewKeyPermissions([]);
+   688→   688→          }
+   689→   689→        }}
+   690→   690→      >
+   691→   691→        <DialogContent className="max-w-md">
+   692→   692→          <DialogHeader>
+   693→   693→            <DialogTitle>Create API Key</DialogTitle>
+   694→   694→            <DialogDescription>
+   695→   695→              Generate a new API key for programmatic access.
+   696→   696→            </DialogDescription>
+   697→   697→          </DialogHeader>
+   698→   698→          <div className="space-y-4 py-2">
+   699→   699→            <div className="space-y-2">
+   700→   700→              <Label htmlFor="key-name">Key Name</Label>
+   701→   701→              <Input
+   702→   702→                id="key-name"
+   703→   703→                placeholder="e.g., CI/CD Pipeline Key"
+   704→   704→                value={newKeyName}
+   705→   705→                onChange={(e) => setNewKeyName(e.target.value)}
+   706→   706→              />
+   707→   707→            </div>
+   708→   708→            <div className="space-y-2">
+   709→   709→              <Label htmlFor="key-expiry">Expiration Date</Label>
+   710→   710→              <Input
+   711→   711→                id="key-expiry"
+   712→   712→                type="date"
+   713→   713→                value={newKeyExpiry}
+   714→   714→                onChange={(e) => setNewKeyExpiry(e.target.value)}
+   715→   715→              />
+   716→   716→            </div>
+   717→   717→            <div className="space-y-3">
+   718→   718→              <Label>Permissions</Label>
+   719→   719→              <div className="space-y-2">
+   720→   720→                {PERMISSION_OPTIONS.map((perm) => (
+   721→   721→                  <label
+   722→   722→                    key={perm.value}
+   723→   723→                    className="flex items-center gap-2 cursor-pointer rounded-md border p-3 hover:bg-muted/50 transition-colors"
+   724→   724→                  >
+   725→   725→                    <Checkbox
+   726→   726→                      checked={newKeyPermissions.includes(perm.value)}
+   727→   727→                      onCheckedChange={() => togglePermission(perm.value)}
+   728→   728→                    />
+   729→   729→                    <span className="text-sm">{perm.label}</span>
+   730→   730→                    <span className="ml-auto font-mono text-xs text-muted-foreground">
+   731→   731→                      {perm.value}
+   732→   732→                    </span>
+   733→   733→                  </label>
+   734→   734→                ))}
+   735→   735→              </div>
+   736→   736→            </div>
+   737→   737→          </div>
+   738→   738→          <DialogFooter>
+   739→   739→            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+   740→   740→              Cancel
+   741→   741→            </Button>
+   742→   742→            <Button onClick={handleCreate} disabled={!newKeyName.trim() || creating}>
+   743→   743→              {creating ? 'Creating...' : 'Create Key'}
+   744→   744→            </Button>
+   745→   745→          </DialogFooter>
+   746→   746→        </DialogContent>
+   747→   747→      </Dialog>
+   748→   748→
+   749→   749→      {/* Created Key Display Dialog */}
+   750→   750→      <Dialog
+   751→   751→        open={!!createdKey}
+   752→   752→        onOpenChange={(open) => {
+   753→   753→          if (!open) {
+   754→   754→            setCreatedKey(null);
+   755→   755→            setCreateOpen(false);
+   756→   756→          }
+   757→   757→        }}
+   758→   758→      >
+   759→   759→        <DialogContent className="max-w-md">
+   760→   760→          <DialogHeader>
+   761→   761→            <DialogTitle>API Key Created</DialogTitle>
+   762→   762→            <DialogDescription>
+   763→   763→              Your API key has been generated. Copy it now — it will not be shown again.
+   764→   764→            </DialogDescription>
+   765→   765→          </DialogHeader>
+   766→   766→          <div className="space-y-3">
+   767→   767→            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+   768→   768→              <div className="flex items-start gap-2">
+   769→   769→                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+   770→   770→                <p className="text-sm text-amber-400">
+   771→   771→                  This key will not be shown again. Make sure to copy it and store it securely.
+   772→   772→                </p>
+   773→   773→              </div>
+   774→   774→            </div>
+   775→   775→            <div className="space-y-2">
+   776→   776→              <Label>API Key</Label>
+   777→   777→              <div className="flex items-center gap-2">
+   778→   778→                <Input
+   779→   779→                  value={createdKey || ''}
+   780→   780→                  readOnly
+   781→   781→                  className="font-mono text-xs bg-muted/50"
+   782→   782→                />
+   783→   783→                <Button
+   784→   784→                  variant="outline"
+   785→   785→                  size="icon"
+   786→   786→                  className="shrink-0"
+   787→   787→                  onClick={handleCopyKey}
+   788→   788→                >
+   789→   789→                  {copied ? (
+   790→   790→                    <Check className="h-4 w-4 text-emerald-500" />
+   791→   791→                  ) : (
+   792→   792→                    <Copy className="h-4 w-4" />
+   793→   793→                  )}
+   794→   794→                </Button>
+   795→   795→              </div>
+   796→   796→            </div>
+   797→   797→          </div>
+   798→   798→          <DialogFooter>
+   799→   799→            <Button onClick={() => setCreatedKey(null)}>Done</Button>
+   800→   800→          </DialogFooter>
+   801→   801→        </DialogContent>
+   802→   802→      </Dialog>
+   803→   803→
+   804→   804→      {/* Revoke Key Alert */}
+   805→   805→      <AlertDialog open={!!revokeTarget} onOpenChange={() => setRevokeTarget(null)}>
+   806→   806→        <AlertDialogContent>
+   807→   807→          <AlertDialogHeader>
+   808→   808→            <AlertDialogTitle>Revoke API Key</AlertDialogTitle>
+   809→   809→            <AlertDialogDescription>
+   810→   810→              Are you sure you want to revoke the API key{' '}
+   811→   811→              <span className="font-medium text-foreground">{revokeTarget?.name}</span>?
+   812→   812→              Any applications using this key will lose access immediately.
+   813→   813→            </AlertDialogDescription>
+   814→   814→          </AlertDialogHeader>
+   815→   815→          <AlertDialogFooter>
+   816→   816→            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+   817→   817→            <AlertDialogAction
+   818→   818→              onClick={handleRevoke}
+   819→   819→              disabled={revoking}
+   820→   820→              className="bg-red-600 text-white hover:bg-red-700"
+   821→   821→            >
+   822→   822→              {revoking ? 'Revoking...' : 'Revoke Key'}
+   823→   823→            </AlertDialogAction>
+   824→   824→          </AlertDialogFooter>
+   825→   825→        </AlertDialogContent>
+   826→   826→      </AlertDialog>
+   827→   827→    </div>
+   828→   828→  );
+   829→   829→}
+   830→   830→
+   831→   831→// ── Security Tab ──────────────────────────────────────────────────────────────
+   832→   832→
+   833→   833→interface SsoConfig {
+   834→   834→  provider: string;
+   835→   835→  clientId: string;
+   836→   836→  clientSecret: string;
+   837→   837→  issuerUrl: string;
+   838→   838→  enabled: boolean;
+   839→   839→}
+   840→   840→
+   841→   841→function SecurityTab() {
+   842→   842→  const { toast } = useToast();
+   843→   843→  const [mfaEnabled, setMfaEnabled] = useState(false);
+   844→   844→
+   845→   845→  // SSO state
+   846→   846→  const [ssoConfig, setSsoConfig] = useState<SsoConfig>({
+   847→   847→    provider: 'oidc',
+   848→   848→    clientId: '',
+   849→   849→    clientSecret: '',
+   850→   850→    issuerUrl: '',
+   851→   851→    enabled: false,
+   852→   852→  });
+   853→   853→  const [ssoLoading, setSsoLoading] = useState(true);
+   854→   854→  const [ssoSaving, setSsoSaving] = useState(false);
+   855→   855→  const [oauthDemo, setOAuthDemo] = useState(true);
+   856→   856→
+   857→   857→  const fetchSsoConfig = useCallback(async () => {
+   858→   858→    try {
+   859→   859→      const res = await fetch('/api/org/sso');
+   860→   860→      if (res.ok) {
+   861→   861→        const data = await res.json();
+   862→   862→        setSsoConfig(data);
+   863→   863→      }
+   864→   864→    } catch {
+   865→   865→      toast({ title: 'Failed to load SSO config', variant: 'destructive' });
+   866→   866→    } finally {
+   867→   867→      setSsoLoading(false);
+   868→   868→    }
+   869→   869→  }, [toast]);
+   870→   870→
+   871→   871→  const fetchOAuthStatus = useCallback(async () => {
+   872→   872→    try {
+   873→   873→      const res = await fetch('/api/auth/oauth');
+   874→   874→      if (res.ok) {
+   875→   875→        const data = await res.json();
+   876→   876→        setOAuthDemo(!data.anyConfigured);
+   877→   877→      }
+   878→   878→    } catch {
+   879→   879→      // silent
+   880→   880→    }
+   881→   881→  }, []);
+   882→   882→
+   883→   883→  useEffect(() => {
+   884→   884→    fetchSsoConfig();
+   885→   885→    fetchOAuthStatus();
+   886→   886→  }, [fetchSsoConfig, fetchOAuthStatus]);
+   887→   887→
+   888→   888→  const handleSaveSso = async () => {
+   889→   889→    setSsoSaving(true);
+   890→   890→    try {
+   891→   891→      const res = await fetch('/api/org/sso', {
+   892→   892→        method: 'PUT',
+   893→   893→        headers: { 'Content-Type': 'application/json' },
+   894→   894→        body: JSON.stringify(ssoConfig),
+   895→   895→      });
+   896→   896→      if (!res.ok) {
+   897→   897→        const err = await res.json();
+   898→   898→        toast({ title: err.error || 'Failed to save SSO config', variant: 'destructive' });
+   899→   899→        return;
+   900→   900→      }
+   901→   901→      const updated = await res.json();
+   902→   902→      setSsoConfig(updated);
+   903→   903→      toast({
+   904→   904→        title: 'SSO configuration saved',
+   905→   905→        description: 'Your SSO settings have been updated successfully.',
+   906→   906→      });
+   907→   907→    } catch {
+   908→   908→      toast({ title: 'Failed to save SSO config', variant: 'destructive' });
+   909→   909→    } finally {
+   910→   910→      setSsoSaving(false);
+   911→   911→    }
+   912→   912→  };
+   913→   913→
+   914→   914→  const handleSettingChange = () => {
+   915→   915→    toast({
+   916→   916→      title: 'Settings saved',
+   917→   917→      description: 'Security settings updated successfully.',
+   918→   918→    });
+   919→   919→  };
+   920→   920→
+   921→   921→  const providerLabels: Record<string, string> = {
+   922→   922→    oidc: 'OIDC (Generic)',
+   923→   923→    google: 'Google Workspace',
+   924→   924→    github: 'GitHub Enterprise',
+   925→   925→    saml: 'SAML',
+   926→   926→  };
+   927→   927→
+   928→   928→  return (
+   929→   929→    <div className="space-y-6">
+   930→   930→      {/* SSO Configuration */}
+   931→   931→      <Card>
+   932→   932→        <CardHeader>
+   933→   933→          <div className="flex items-center justify-between">
+   934→   934→            <div className="flex items-center gap-2">
+   935→   935→              <Lock className="h-4 w-4 text-primary" />
+   936→   936→              <CardTitle className="text-base">SSO Configuration</CardTitle>
+   937→   937→            </div>
+   938→   938→            <div className="flex items-center gap-2">
+   939→   939→              {ssoConfig.enabled ? (
+   940→   940→                <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/25 hover:bg-emerald-500/20">
+   941→   941→                  Active
+   942→   942→                </Badge>
+   943→   943→              ) : (
+   944→   944→                <Badge variant="secondary" className="text-muted-foreground">
+   945→   945→                  Disabled
+   946→   946→                </Badge>
+   947→   947→              )}
+   948→   948→              {oauthDemo && (
+   949→   949→                <Badge variant="outline" className="text-amber-600 border-amber-500/40">
+   950→   950→                  Demo Mode
+   951→   951→                </Badge>
+   952→   952→              )}
+   953→   953→            </div>
+   954→   954→          </div>
+   955→   955→          <CardDescription>
+   956→   956→            Configure Single Sign-On for your organization.
+   957→   957→          </CardDescription>
+   958→   958→        </CardHeader>
+   959→   959→        <CardContent className="space-y-4">
+   960→   960→          {ssoLoading ? (
+   961→   961→            <div className="space-y-4">
+   962→   962→              <Skeleton className="h-9 w-full" />
+   963→   963→              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   964→   964→                <Skeleton className="h-9 w-full" />
+   965→   965→                <Skeleton className="h-9 w-full" />
+   966→   966→              </div>
+   967→   967→              <Skeleton className="h-9 w-full" />
+   968→   968→            </div>
+   969→   969→          ) : (
+   970→   970→            <>
+   971→   971→              <div className="flex items-center justify-between rounded-lg border p-4">
+   972→   972→                <div className="space-y-0.5">
+   973→   973→                  <p className="text-sm font-medium">Enable SSO</p>
+   974→   974→                  <p className="text-xs text-muted-foreground">
+   975→   975→                    Allow organization members to sign in with your identity provider
+   976→   976→                  </p>
+   977→   977→                </div>
+   978→   978→                <Switch
+   979→   979→                  checked={ssoConfig.enabled}
+   980→   980→                  onCheckedChange={(checked) =>
+   981→   981→                    setSsoConfig((prev) => ({ ...prev, enabled: checked }))
+   982→   982→                  }
+   983→   983→                />
+   984→   984→              </div>
+   985→   985→
+   986→   986→              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+   987→   987→                <div className="space-y-2">
+   988→   988→                  <Label htmlFor="sso-provider">Provider</Label>
+   989→   989→                  <Select
+   990→   990→                    value={ssoConfig.provider}
+   991→   991→                    onValueChange={(value) =>
+   992→   992→                      setSsoConfig((prev) => ({ ...prev, provider: value }))
+   993→   993→                    }
+   994→   994→                  >
+   995→   995→                    <SelectTrigger id="sso-provider">
+   996→   996→                      <SelectValue placeholder="Select provider" />
+   997→   997→                    </SelectTrigger>
+   998→   998→                    <SelectContent>
+   999→   999→                      {Object.entries(providerLabels).map(([key, label]) => (
+  1000→  1000→                        <SelectItem key={key} value={key}>
+  1001→  1001→                          {label}
+  1002→  1002→                        </SelectItem>
+  1003→  1003→                      ))}
+  1004→  1004→                    </SelectContent>
+  1005→  1005→                  </Select>
+  1006→  1006→                </div>
+  1007→  1007→                <div className="space-y-2">
+  1008→  1008→                  <Label htmlFor="sso-client-id">Client ID</Label>
+  1009→  1009→                  <Input
+  1010→  1010→                    id="sso-client-id"
+  1011→  1011→                    value={ssoConfig.clientId}
+  1012→  1012→                    onChange={(e) =>
+  1013→  1013→                      setSsoConfig((prev) => ({ ...prev, clientId: e.target.value }))
+  1014→  1014→                    }
+  1015→  1015→                    placeholder="Enter client ID"
+  1016→  1016→                    className="font-mono"
+  1017→  1017→                  />
+  1018→  1018→                </div>
+  1019→  1019→                <div className="space-y-2">
+  1020→  1020→                  <Label htmlFor="sso-client-secret">Client Secret</Label>
+  1021→  1021→                  <div className="flex items-center gap-2">
+  1022→  1022→                    <Input
+  1023→  1023→                      id="sso-client-secret"
+  1024→  1024→                      type="password"
+  1025→  1025→                      value={ssoConfig.clientSecret}
+  1026→  1026→                      onChange={(e) =>
+  1027→  1027→                        setSsoConfig((prev) => ({ ...prev, clientSecret: e.target.value }))
+  1028→  1028→                      }
+  1029→  1029→                      placeholder="Enter client secret"
+  1030→  1030→                      className="font-mono"
+  1031→  1031→                    />
+  1032→  1032→                    <Tooltip>
+  1033→  1033→                      <TooltipTrigger asChild>
+  1034→  1034→                        <Button
+  1035→  1035→                          variant="outline"
+  1036→  1036→                          size="icon"
+  1037→  1037→                          className="shrink-0"
+  1038→  1038→                          onClick={() => {
+  1039→  1039→                            navigator.clipboard.writeText(ssoConfig.clientSecret);
+  1040→  1040→                            toast({ title: 'Copied to clipboard' });
+  1041→  1041→                          }}
+  1042→  1042→                        >
+  1043→  1043→                          <Copy className="h-4 w-4" />
+  1044→  1044→                        </Button>
+  1045→  1045→                      </TooltipTrigger>
+  1046→  1046→                      <TooltipContent>Copy Client Secret</TooltipContent>
+  1047→  1047→                    </Tooltip>
+  1048→  1048→                  </div>
+  1049→  1049→                </div>
+  1050→  1050→                <div className="space-y-2">
+  1051→  1051→                  <Label htmlFor="sso-issuer-url">Issuer URL</Label>
+  1052→  1052→                  <Input
+  1053→  1053→                    id="sso-issuer-url"
+  1054→  1054→                    value={ssoConfig.issuerUrl}
+  1055→  1055→                    onChange={(e) =>
+  1056→  1056→                      setSsoConfig((prev) => ({ ...prev, issuerUrl: e.target.value }))
+  1057→  1057→                    }
+  1058→  1058→                    placeholder="https://your-idp.example.com/oauth2/default"
+  1059→  1059→                    className="font-mono text-xs"
+  1060→  1060→                  />
+  1061→  1061→                </div>
+  1062→  1062→              </div>
+  1063→  1063→
+  1064→  1064→              <div className="flex items-center justify-end">
+  1065→  1065→                <Button onClick={handleSaveSso} disabled={ssoSaving}>
+  1066→  1066→                  {ssoSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+  1067→  1067→                  Save SSO Configuration
+  1068→  1068→                </Button>
+  1069→  1069→              </div>
+  1070→  1070→            </>
+  1071→  1071→          )}
+  1072→  1072→        </CardContent>
+  1073→  1073→      </Card>
+  1074→  1074→
+  1075→  1075→      {/* MFA Enforcement */}
+  1076→  1076→      <Card>
+  1077→  1077→        <CardHeader>
+  1078→  1078→          <div className="flex items-center gap-2">
+  1079→  1079→            <Shield className="h-4 w-4 text-primary" />
+  1080→  1080→            <CardTitle className="text-base">Multi-Factor Authentication</CardTitle>
+  1081→  1081→          </div>
+  1082→  1082→          <CardDescription>
+  1083→  1083→            Enforce MFA for all organization members.
+  1084→  1084→          </CardDescription>
+  1085→  1085→        </CardHeader>
+  1086→  1086→        <CardContent>
+  1087→  1087→          <div className="flex items-center justify-between rounded-lg border p-4">
+  1088→  1088→            <div className="space-y-0.5">
+  1089→  1089→              <p className="text-sm font-medium">MFA Enforcement</p>
+  1090→  1090→              <p className="text-xs text-muted-foreground">
+  1091→  1091→                Require all members to use multi-factor authentication
+  1092→  1092→              </p>
+  1093→  1093→            </div>
+  1094→  1094→            <Switch
+  1095→  1095→              checked={mfaEnabled}
+  1096→  1096→              onCheckedChange={(checked) => {
+  1097→  1097→                setMfaEnabled(checked);
+  1098→  1098→                handleSettingChange();
+  1099→  1099→              }}
+  1100→  1100→            />
+  1101→  1101→          </div>
+  1102→  1102→        </CardContent>
+  1103→  1103→      </Card>
+  1104→  1104→
+  1105→  1105→      {/* Session Management */}
+  1106→  1106→      <Card>
+  1107→  1107→        <CardHeader>
+  1108→  1108→          <div className="flex items-center gap-2">
+  1109→  1109→            <Clock className="h-4 w-4 text-primary" />
+  1110→  1110→            <CardTitle className="text-base">Session Management</CardTitle>
+  1111→  1111→          </div>
+  1112→  1112→          <CardDescription>
+  1113→  1113→            Configure session settings for your organization.
+  1114→  1114→          </CardDescription>
+  1115→  1115→        </CardHeader>
+  1116→  1116→        <CardContent className="space-y-4">
+  1117→  1117→          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+  1118→  1118→            <div className="space-y-2">
+  1119→  1119→              <Label>Default Session Duration</Label>
+  1120→  1120→              <Input value="24 hours" readOnly className="bg-muted/50" />
+  1121→  1121→            </div>
+  1122→  1122→            <div className="space-y-2">
+  1123→  1123→              <Label>Max Concurrent Sessions</Label>
+  1124→  1124→              <Input value="5 per user" readOnly className="bg-muted/50" />
+  1125→  1125→            </div>
+  1126→  1126→          </div>
+  1127→  1127→          <p className="text-xs text-muted-foreground">
+  1128→  1128→            Session settings can be configured by organization administrators.
+  1129→  1129→          </p>
+  1130→  1130→        </CardContent>
+  1131→  1131→      </Card>
+  1132→  1132→    </div>
+  1133→  1133→  );
+  1134→  1134→}
+  1135→  1135→
+  1136→  1136→// ── Main Component ────────────────────────────────────────────────────────────
+  1137→  1137→
+  1138→  1138→export default function OrgSettingsPage() {
+  1139→  1139→  const { toast } = useToast();
+  1140→  1140→  const [org, setOrg] = useState<OrgData | null>(null);
+  1141→  1141→  const [loading, setLoading] = useState(true);
+  1142→  1142→
+  1143→  1143→  const fetchOrg = useCallback(async () => {
+  1144→  1144→    try {
+  1145→  1145→      const res = await fetch('/api/org');
+  1146→  1146→      if (res.ok) {
+  1147→  1147→        const data = await res.json();
+  1148→  1148→        setOrg(data);
+  1149→  1149→      }
+  1150→  1150→    } catch {
+  1151→  1151→      toast({ title: 'Failed to load organization', variant: 'destructive' });
+  1152→  1152→    } finally {
+  1153→  1153→      setLoading(false);
+  1154→  1154→    }
+  1155→  1155→  }, [toast]);
+  1156→  1156→
+  1157→  1157→  useEffect(() => {
+  1158→  1158→    fetchOrg();
+  1159→  1159→  }, [fetchOrg]);
+  1160→  1160→
+  1161→  1161→  return (
+  1162→  1162→    <div className="space-y-6">
+  1163→  1163→      {/* Header */}
+  1164→  1164→      <div className="flex items-center gap-3">
+  1165→  1165→        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+  1166→  1166→          <Settings className="h-5 w-5 text-primary" />
+  1167→  1167→        </div>
+  1168→  1168→        <div>
+  1169→  1169→          <h1 className="text-2xl font-bold tracking-tight">Organization Settings</h1>
+  1170→  1170→          <p className="text-sm text-muted-foreground">
+  1171→  1171→            Manage your organization, members, and security
+  1172→  1172→          </p>
+  1173→  1173→        </div>
+  1174→  1174→      </div>
+  1175→  1175→
+  1176→  1176→      {/* Tabs */}
+  1177→  1177→      <Tabs defaultValue="general" className="space-y-6">
+  1178→  1178→        <TabsList>
+  1179→  1179→          <TabsTrigger value="general" className="gap-1.5">
+  1180→  1180→            <Settings className="h-3.5 w-3.5" />
+  1181→  1181→            General
+  1182→  1182→          </TabsTrigger>
+  1183→  1183→          <TabsTrigger value="members" className="gap-1.5">
+  1184→  1184→            <Users className="h-3.5 w-3.5" />
+  1185→  1185→            Members
+  1186→  1186→          </TabsTrigger>
+  1187→  1187→          <TabsTrigger value="api-keys" className="gap-1.5">
+  1188→  1188→            <Key className="h-3.5 w-3.5" />
+  1189→  1189→            API Keys
+  1190→  1190→          </TabsTrigger>
+  1191→  1191→          <TabsTrigger value="security" className="gap-1.5">
+  1192→  1192→            <Shield className="h-3.5 w-3.5" />
+  1193→  1193→            Security
+  1194→  1194→          </TabsTrigger>
+  1195→  1195→        </TabsList>
+  1196→  1196→
+  1197→  1197→        <TabsContent value="general">
+  1198→  1198→          <GeneralTab org={org} loading={loading} />
+  1199→  1199→        </TabsContent>
+  1200→  1200→
+  1201→  1201→        <TabsContent value="members">
+  1202→  1202→          <MembersTab />
+  1203→  1203→        </TabsContent>
+  1204→  1204→
+  1205→  1205→        <TabsContent value="api-keys">
+  1206→  1206→          <ApiKeysTab />
+  1207→  1207→        </TabsContent>
+  1208→  1208→
+  1209→  1209→        <TabsContent value="security">
+  1210→  1210→          <SecurityTab />
+  1211→  1211→        </TabsContent>
+  1212→  1212→      </Tabs>
+  1213→  1213→    </div>
+  1214→  1214→  );
+  1215→  1215→}
