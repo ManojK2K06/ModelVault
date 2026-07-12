@@ -457,7 +457,3 @@ The Prisma schema defines 13 models:
 | GET/POST | `/api/org/api-keys` | Manage API keys |
 
 ---
-
-## License
-
-Private -- all rights reserved.
